@@ -429,8 +429,11 @@ bundle-shims: bundle-dirs
 	# lex is a script onto flex, as Apple ship it, and unifdefall a
 	# script onto unifdef -- the one in developer_cmds, which is the file
 	# Apple install.  Each only once the program it runs is here.
+	# flex++ is not a link: Apple ship a second copy of flex under that
+	# name, byte for byte the same file.
 	@if [ -e ${SHIM_BIN}/flex ]; then \
 		cp ${SCRIPTS}/lex.sh ${SHIM_BIN}/lex && chmod 755 ${SHIM_BIN}/lex; \
+		cp -f ${SHIM_BIN}/flex ${SHIM_BIN}/flex++; \
 	 fi
 	@if [ -e ${SHIM_BIN}/unifdef ]; then \
 		cp ${DEVTOOLS}/developer_cmds/unifdef/unifdefall.sh \

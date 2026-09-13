@@ -965,6 +965,12 @@ undershoots there, so running it would lift every negative sample the
 chain produced -- which is what the default gamma of 1.000000 does if the
 option is read as present rather than as a value.
 
+EXR is read through ImageIO, which hands a half float image back as
+sixteen bit components with the float flag set: four of them for an RGBA
+or RGB file, one for a single channel one, never premultiplied.  That is
+the whole of the reader, and the levels it feeds are Apple's exactly for
+RGBA16, RGB16 and R16.
+
 An output whose extension is not one this tool writes falls back to KTX,
 which is what Apple do: `.png`, `.jpg`, `.tga`, `.xyz` and no extension at
 all all come out as version 1 containers in both tools.  `.exr` is the
@@ -1284,7 +1290,22 @@ of it.  Everything around it is in place: the two refusals are exact, and
 the case they leave says so and stops rather than writing a KTX with an
 .exr on the end, which is what happened before.
 
-The EXR and HDR inputs Apple's usage also lists, and BC7 mode 0.
+Two channel EXR input.  ImageIO reads an EXR back as half float
+components, which is all the reader here needed, and RGBA16, RGB16 and
+R16 come out byte for byte -- but an EXR with exactly two channels comes
+back from ImageIO as one, sixteen bits per pixel, with green gone.  Apple
+keep both, so they are not reading it this way.
+
+The header dump.  Reading an EXR, Apple print the whole of its header to
+stdout the way `exrheader` does -- every attribute, in file order, with
+the channel list and the compression name and the two windows -- which is
+a debug print left in.  The file this tool writes is right and the chatter
+beside it is missing.  Reproducing it means parsing the header and
+formatting each attribute by type, and the flag line would need pinning
+down first: theirs says `flags longnames` for a file whose version word
+has no flag bits set at all.
+
+HDR input, which Apple's usage also lists, and BC7 mode 0.
 
 `--max_extent` announces itself: `Resized image to (width: %d, height:
 %d, depth: %d)`, once for every image it resized -- a face each for a

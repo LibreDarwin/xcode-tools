@@ -118,6 +118,9 @@ PORTS+=	swiftlang-llvm/llvm-project llvm ${XCTOOLCHAIN}/usr/bin
 # ------------------------------------------------------------------
 PORTS+=	swiftlang-llvm/swift swift ${XCTOOLCHAIN}/usr/bin
 
+# swift-build-tool, from llbuild.  C++ only; see mk/port.d/llbuild.mk.
+PORTS+=	swiftlang-llvm/swift-llbuild llbuild ${XCTOOLCHAIN}/usr/bin
+
 # llvm-cbe reads the LLVM built above, so it comes after it.
 PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 

@@ -391,7 +391,9 @@ bundle-aliases: bundle-dirs
 .for a t in nm llvm-nm otool llvm-otool ld.lld lld \
 	    swift swift-frontend swiftc swift-frontend \
 	    llvm-readelf llvm-readobj llvm-strip llvm-objcopy \
-	    llvm-ranlib llvm-ar
+	    llvm-ranlib llvm-ar \
+	    c++filt llvm-cxxfilt dwarfdump llvm-dwarfdump gcov llvm-cov \
+	    readtapi llvm-readtapi clang-cache clang
 	@if [ -e ${TC_DIR}/usr/bin/${t} ] && [ ! -e ${TC_DIR}/usr/bin/${a} ]; then \
 		ln -sfn ${t} ${TC_DIR}/usr/bin/${a}; \
 		${ECHO} "alias: ${a} -> ${t}"; \
@@ -424,6 +426,24 @@ bundle-shims: bundle-dirs
 	@if [ ! -e ${SHIM_BIN}/cpp ]; then \
 		cp ${SCRIPTS}/cpp.sh ${SHIM_BIN}/cpp && chmod 755 ${SHIM_BIN}/cpp; \
 	 fi
+	# lex is a script onto flex, as Apple ship it, and unifdefall a
+	# script onto unifdef -- the one in developer_cmds, which is the file
+	# Apple install.  Each only once the program it runs is here.
+	@if [ -e ${SHIM_BIN}/flex ]; then \
+		cp ${SCRIPTS}/lex.sh ${SHIM_BIN}/lex && chmod 755 ${SHIM_BIN}/lex; \
+	 fi
+	@if [ -e ${SHIM_BIN}/unifdef ]; then \
+		cp ${DEVTOOLS}/developer_cmds/unifdef/unifdefall.sh \
+		    ${SHIM_BIN}/unifdefall && chmod 755 ${SHIM_BIN}/unifdefall; \
+	 fi
+	# The clang driver configs for the static Linux musl targets Swift
+	# cross-compiles to.  The C++ name is a link to the C one, as in a
+	# stock toolchain.
+.for arch in aarch64 x86_64
+	@cp ${SCRIPTS}/${arch}-swift-linux-musl-clang.cfg ${SHIM_BIN}/ && \
+		ln -sfn ${arch}-swift-linux-musl-clang.cfg \
+		    ${SHIM_BIN}/${arch}-swift-linux-musl-clang++.cfg
+.endfor
 	@mkdir -p ${RELEASE}/usr/bin
 	@cp ${SCRIPTS}/xcrun-tool.sh ${RELEASE}/usr/bin/xcrun-tool
 	@chmod 755 ${RELEASE}/usr/bin/xcrun-tool

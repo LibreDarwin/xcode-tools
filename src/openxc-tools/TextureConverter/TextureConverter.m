@@ -229,6 +229,9 @@ static void alpha_to_coverage(float **levels, const int *widths,
     const int *heights, const int *depths, int n, int face, float *desired,
     NSDictionary<NSString *, NSString *> *opts);
 static bool wants_header(NSString *output);
+static bool wants_exr(NSString *output);
+static int exr_refusal(NSString *output, const char *name, bool srgb,
+    int nlevels);
 static bool wants_dds(NSString *output);
 static NSData *write_dds_generic(void **levels, const size_t *sizes,
     const int *widths, const int *heights, const int *depths, int nlevels,
@@ -1832,6 +1835,15 @@ do_convert(NSArray<NSString *> *paths,
 			}
 		}
 
+		{
+			int st = exr_refusal(output, oname, srgb, n);
+
+			if (st >= 0) {
+				for (i = 0; i < n * faces; i++)
+					free(ptrs[i]);
+				return (st);
+			}
+		}
 		data = wants_dds(output) ?
 		    write_dds_generic(ptrs, sizes, widths, heights, depths, n,
 		        faces, oname, srgb) :
@@ -1896,6 +1908,62 @@ wants_dds(NSString *output)
 {
 	return ([[output pathExtension] caseInsensitiveCompare:@"dds"] ==
 	    NSOrderedSame);
+}
+
+static bool
+wants_exr(NSString *output)
+{
+	return ([[output pathExtension] caseInsensitiveCompare:@"exr"] ==
+	    NSOrderedSame);
+}
+
+/*
+ * OpenEXR, which this tool cannot write and Apple mostly will not.
+ *
+ * The format has to be one of the four half ones -- anything else, block
+ * or byte or single precision, is refused by name -- and the file has to
+ * be a single level, EXR having nowhere to put a chain.  Both complaints
+ * go to stderr without a trailing newline, so they run into whatever
+ * stdout prints next, and both leave no file behind and still exit zero.
+ * Note the capital in the first and the lower case in the second: theirs.
+ *
+ * What is left, a single level of RGBA16, R16, RG16 or RGB16, is a file
+ * Apple write and this tool does not: theirs is PIZ compressed, which is
+ * a wavelet and a Huffman coder, and matching it byte for byte means
+ * OpenEXR itself rather than a second implementation of it.  Saying so
+ * and stopping is better than writing a KTX with an .exr on the end,
+ * which is what happened before.
+ *
+ * Returns the status to exit with, or -1 to carry on.
+ */
+static int
+exr_refusal(NSString *output, const char *name, bool srgb, int nlevels)
+{
+	char buf[64];
+
+	if (!wants_exr(output))
+		return (-1);
+	{
+		uint32_t gl, base, metal;
+		int bx, by;
+
+		if (!format_lookup(name, &gl, &base, &bx, &by, &metal))
+			bx = 4;
+		if (format_channel_bits(name) != 16 || bx != 1) {
+			fprintf(stderr, "Error: EXR File format does not "
+			    "support compression format %s",
+			    format_atc_for(name, srgb, buf, sizeof(buf)));
+			return (0);
+		}
+	}
+	if (nlevels > 1) {
+		fprintf(stderr, "Error: EXR file format does not support "
+		    "multiple miplevels");
+		return (0);
+	}
+	fprintf(stderr, "Error: Writing EXR is not implemented in this "
+	    "build!\n");
+	return (255);
 }
 
 /*
@@ -2737,6 +2805,13 @@ do_compress(NSArray<NSString *> *paths,
 		NSString *options = tc_options_string(opts, compressor, fmt);
 		bool annotate = opts[@"disable_annotation"] == nil;
 
+		{
+			int st = exr_refusal(output, [fmt UTF8String], srgb,
+			    n);
+
+			if (st >= 0)
+				return (st);
+		}
 		data = wants_dds(output) ?
 		    write_dds_generic(blocks, sizes, widths, heights, depths,
 		        n, faces, [fmt UTF8String], srgb) :
@@ -3189,6 +3264,18 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 		bool annotate = opts[@"disable_annotation"] == nil;
 		NSData *file;
 
+		if (wants_exr(out)) {
+			/*
+			 * Apple refuse this one from the other end: the
+			 * complaint about the type is on stdout, without a
+			 * newline, and the generic failure on stderr.
+			 */
+			printf("Unsupported decompressed texture type for "
+			    "selected file type");
+			fprintf(stderr, "Error: Failed to decompress "
+			    "texture\n");
+			return (255);
+		}
 		if (wants_dds(out)) {
 			file = write_dds_generic(outs, sizes, widths,
 			    heights, NULL, n, 1, oname, false);

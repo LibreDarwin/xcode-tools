@@ -65,11 +65,23 @@ P_LIBS=		lib/libswiftDemangle.dylib
 # toolchain should depend on: libc++ is ABI-stable on macOS and the
 # system always has one, whereas this toolchain ships none and Apple's
 # does not either.  Point it at the same one Apple points at.
+#
+# lib_InternalSwiftScan is the dependency scanner swift-driver loads from
+# lib/swift/host; without it the driver warns and scans by running
+# swift-frontend instead.  The build leaves it in lib, so it is put into
+# the tree P_TREES stages the way Apple's toolchain has it: the file in
+# host/compiler, beside the lib_Compiler* libraries it loads through
+# @loader_path, and a symlink to it in host.  A copy in host itself does
+# not load.
 P_POST_BUILD=	for f in lib/libswiftDemangle.dylib bin/swift-demangle \
 		    bin/swift-stdlib-tool; do \
 			install_name_tool -change @rpath/libc++.1.dylib \
 			    /usr/lib/libc++.1.dylib $$f || exit 1; \
-		done
+		done && \
+		rm -f lib/swift/host/lib_InternalSwiftScan.dylib && \
+		cp -f lib/lib_InternalSwiftScan.dylib lib/swift/host/compiler/ && \
+		ln -s compiler/lib_InternalSwiftScan.dylib \
+		    lib/swift/host/lib_InternalSwiftScan.dylib
 
 # swift-demangle is the command-line demangler and swift-stdlib-tool the
 # one Xcode's build runs to copy the Swift runtime into an app bundle.

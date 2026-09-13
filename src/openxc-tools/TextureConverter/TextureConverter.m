@@ -219,8 +219,8 @@ static NSString *tc_options_string(NSDictionary<NSString *, NSString *> *,
 static bool wants_ktx2(NSString *output);
 static NSData *write_ktx2_generic(void **levels, const size_t *sizes,
     const int *widths, const int *heights, const int *depths, int nlevels,
-    int faces, bool array, const char *name, bool premultiplied, bool srgb,
-    NSString *options, bool annotate);
+    int faces, bool array, bool p3, const char *name, bool premultiplied,
+    bool srgb, NSString *options, bool annotate);
 static void *pack_raw(const float *rgba, int w, int h, const char *name,
     size_t *out_len);
 static float *unpack_level(const struct ktx_level *, bool bgra,
@@ -234,8 +234,8 @@ static NSData *write_dds_generic(void **levels, const size_t *sizes,
     const int *widths, const int *heights, const int *depths, int nlevels,
     int faces, const char *name, bool srgb);
 static NSData *write_header_generic(void **, const size_t *, const int *,
-    const int *, const int *, int, int, bool, const char *, bool, bool,
-    NSString *, NSDictionary<NSString *, NSString *> *);
+    const int *, const int *, int, int, bool, const char *, const char *,
+    bool, bool, NSString *, NSDictionary<NSString *, NSString *> *);
 
 /*
  * Every option the tool takes, with the default the usage text advertises.
@@ -1019,6 +1019,121 @@ static const uint8_t ktx1_id[12] = {
 };
 
 /*
+ * The colour moved from one gamut to the other, which is what naming both
+ * of them asks for.  Naming one is an annotation and nothing else; naming
+ * two that differ is a conversion, and it is a plain three by three matrix
+ * on the stored values -- not on linear light, the values as they stand.
+ *
+ * The nine numbers are Apple's, read back by handing their tool an image
+ * of pure red, green and blue: a basis vector in gives a column out.  They
+ * are not the textbook matrix, whose blue-to-red and blue-to-green terms
+ * are zero where these are a part in sixty thousand, so theirs is derived
+ * from primaries at runtime and this is the derivation's residue.  White
+ * comes back 0.99999994 in red rather than one, which is the three
+ * products summed in float in this order.
+ *
+ * Nothing happens for a normal map: its channels are a direction.
+ */
+static void
+gamut_convert(float *rgba, int w, int h, int d, const char *from,
+    const char *to)
+{
+	static const float to_p3[3][3] = {
+		{ 0.822426081f, 0.177557006f, 1.68917213e-05f },
+		{ 0.0332198292f, 0.966798246f, -1.80696261e-05f },
+		{ 0.017074177f, 0.0723747835f, 0.910551071f }
+	};
+	static const float to_srgb[3][3] = {
+		{ 1.22500277f, -0.224975526f, -2.72331854e-05f },
+		{ -0.0420922153f, 1.04207075f, 2.14646407e-05f },
+		{ -0.0196249168f, -0.0786099508f, 1.09823489f }
+	};
+	const float (*m)[3];
+	size_t n = (size_t)w * (size_t)h * (size_t)(d > 1 ? d : 1), i;
+
+	if (from == NULL || to == NULL || strcmp(from, to) == 0)
+		return;
+	m = strcmp(to, "DisplayP3") == 0 ? to_p3 : to_srgb;
+	for (i = 0; i < n; i++) {
+		float *px = &rgba[i * 4];
+		float r = px[0], g = px[1], b = px[2];
+		int c;
+
+		for (c = 0; c < 3; c++)
+			px[c] = m[c][0] * r + m[c][1] * g + m[c][2] * b;
+	}
+}
+
+/*
+ * --gamut_in and --gamut_out.  Two gamuts exist, sRGB and DisplayP3, and
+ * the names are matched without regard to case but written back the way
+ * the usage spells them.  The output gamut is the one that counts, and it
+ * falls back to the input's: --gamut_in=DisplayP3 alone marks the file
+ * DisplayP3.  NULL when neither was given.
+ */
+static const char *
+gamut_in_of(NSDictionary<NSString *, NSString *> *opts)
+{
+	NSString *g = opts[@"gamut_in"];
+
+	if ([g caseInsensitiveCompare:@"sRGB"] == NSOrderedSame)
+		return ("sRGB");
+	if ([g caseInsensitiveCompare:@"DisplayP3"] == NSOrderedSame)
+		return ("DisplayP3");
+	return (NULL);
+}
+
+static const char *
+gamut_of(NSDictionary<NSString *, NSString *> *opts)
+{
+	NSString *g = opts[@"gamut_out"];
+
+	if (g.length == 0)
+		g = opts[@"gamut_in"];
+	if ([g caseInsensitiveCompare:@"sRGB"] == NSOrderedSame)
+		return ("sRGB");
+	if ([g caseInsensitiveCompare:@"DisplayP3"] == NSOrderedSame)
+		return ("DisplayP3");
+	return (NULL);
+}
+
+/*
+ * Both of them checked, the input first.  Apple print the usage on stdout
+ * and the complaint on stderr, and the complaint for --gamut_out has the
+ * value run through a float format that never saw a number: every bad
+ * output gamut is reported as "1.000000".  Theirs, kept.
+ */
+/* Whether the file's gamut is DisplayP3, which only version 2 records. */
+static bool
+p3_gamut(NSDictionary<NSString *, NSString *> *opts, bool normal)
+{
+	const char *g = gamut_of(opts);
+
+	return (!normal && g != NULL && strcmp(g, "DisplayP3") == 0);
+}
+
+static bool
+gamuts_ok(NSDictionary<NSString *, NSString *> *opts)
+{
+	static const char *const which[] = { "gamut_in", "gamut_out" };
+	size_t i;
+
+	for (i = 0; i < sizeof(which) / sizeof(which[0]); i++) {
+		NSString *g = opts[[NSString stringWithUTF8String:which[i]]];
+
+		if (g.length == 0 ||
+		    [g caseInsensitiveCompare:@"sRGB"] == NSOrderedSame ||
+		    [g caseInsensitiveCompare:@"DisplayP3"] == NSOrderedSame)
+			continue;
+		short_usage();
+		fprintf(stderr, "Error: Unsupported %s mode \"%s\"!\n",
+		    which[i], i == 0 ? [g UTF8String] : "1.000000");
+		return (false);
+	}
+	return (true);
+}
+
+/*
  * KTX version 1.  The conversion path writes RGBA32F whatever --format asks
  * for, which is what Apple's does; the compression path writes whichever
  * block format was asked for, and then the samples are the encoder's.
@@ -1026,10 +1141,10 @@ static const uint8_t ktx1_id[12] = {
 static NSData *
 write_ktx_generic(void **levels, const size_t *sizes, const int *widths,
     const int *heights, const int *depths, int nlevels, int faces,
-    bool array, uint32_t gl_internal,
+    bool array, const char *gamut, uint32_t gl_internal,
     uint32_t gl_base, uint32_t gl_type, uint32_t gl_type_size,
     uint32_t gl_format, uint32_t texel_bytes, uint32_t metal,
-    bool premultiplied, NSString *options, bool annotate)
+    bool premultiplied, bool srgb_transfer, NSString *options, bool annotate)
 {
 	NSMutableData *out = [NSMutableData data];
 	NSMutableData *kvd = [NSMutableData data];
@@ -1064,6 +1179,18 @@ write_ktx_generic(void **levels, const size_t *sizes, const int *widths,
 	 * --disable_annotation leaves it alone.  Written only when the
 	 * colour actually was premultiplied.
 	 */
+	/*
+	 * The gamut is describing the file too, and is written whenever
+	 * --gamut_in or --gamut_out named one -- version 1 only, and never
+	 * for a normal map, whose channels are a direction and have no
+	 * gamut.  The transfer beside it says sRGB when the pixel format is
+	 * an sRGB one and linear otherwise; --gamma_out does not move it.
+	 */
+	if (gamut != NULL) {
+		put_kv(kvd, "com.apple.image.colorGamut", gamut);
+		put_kv(kvd, "com.apple.image.colorTransfer",
+		    srgb_transfer ? "sRGB" : "linear");
+	}
 	if (premultiplied) {
 		static const uint8_t one[4] = { 1, 0, 0, 0 };
 
@@ -1272,6 +1399,8 @@ do_convert(NSArray<NSString *> *paths,
 		    "input textures!\n");
 		return (255);
 	}
+	if (!gamuts_ok(opts))
+		return (255);
 	if (opts[@"rgbm_encoding"] != nil && rgbm_range_of(opts) < 1.0f) {
 		short_usage();
 		fprintf(stderr, "Error: The value for the RGBM range must be "
@@ -1493,6 +1622,20 @@ do_convert(NSArray<NSString *> *paths,
 	}
 
 	/*
+	 * After the chain, before --gamma_out, and a slice at a time.  The
+	 * matrix is linear and so is the filter, so converting before the
+	 * chain and converting after it agree to within a unit in the last
+	 * place -- but they do differ there, and Apple's answer is this
+	 * one: the chain is filtered in the input gamut and every level
+	 * moved afterwards.
+	 */
+	if (!normal) {
+		for (i = 0; i < n; i++)
+			gamut_convert(levels[i], widths[i], heights[i],
+			    depths[i] > 1 ? depths[i] : 1,
+			    gamut_in_of(opts), gamut_of(opts));
+	}
+	/*
 	 * A gamma of one is no gamma at all, and skipping it is not just an
 	 * optimisation: the exponentiation clamps at zero, and the Kaiser
 	 * filter undershoots there, so running it would quietly lift every
@@ -1630,14 +1773,16 @@ do_convert(NSArray<NSString *> *paths,
 		        faces, oname, srgb) :
 		    wants_header(output) ?
 		    write_header_generic(ptrs, sizes, widths, heights, depths,
-		        n, faces, array, oname, srgb, normal, output, opts) :
+		        n, faces, array, gamut_of(opts), oname, srgb, normal,
+		        output, opts) :
 		    wants_ktx2(output) ?
 		    write_ktx2_generic(ptrs, sizes, widths, heights, depths,
-		        n, faces, array, oname, prem, srgb, options,
-		        annotate) :
+		        n, faces, array, p3_gamut(opts, normal), oname, prem,
+		        srgb, options, annotate) :
 		    write_ktx_generic(ptrs, sizes, widths, heights, depths, n,
-		        faces, array, gl, base, type, (uint32_t)(bits / 8),
-		        base, texel, 0, prem, options, annotate);
+		        faces, array, normal ? NULL : gamut_of(opts), gl,
+		        base, type, (uint32_t)(bits / 8), base, texel, 0,
+		        prem, srgb, options, annotate);
 		for (i = 0; i < n * faces; i++)
 			free(ptrs[i]);
 	}
@@ -1731,16 +1876,14 @@ write_dds_generic(void **levels, const size_t *sizes, const int *widths,
 
 /*
  * The levels as a C header.  The identifier everything is named after is
- * the output file's stem, and the gamut is whatever --gamut_out asked for
- * -- the one place either of the gamut options leaves a mark.
+ * the output file's stem, and the gamut is the one gamut_of settles on.
  */
 static NSData *
 write_header_generic(void **levels, const size_t *sizes, const int *widths,
     const int *heights, const int *depths, int nlevels, int faces,
-    bool array, const char *name, bool srgb, bool normal, NSString *output,
-    NSDictionary<NSString *, NSString *> *opts)
+    bool array, const char *gamut, const char *name, bool srgb, bool normal,
+    NSString *output, NSDictionary<NSString *, NSString *> *opts)
 {
-	NSString *gamut = opts[@"gamut_out"];
 	const char *gname = normal ? "atcColorGamutNone" :
 	    "atcColorGamutUnknown";
 	char buf[64];
@@ -1750,9 +1893,9 @@ write_header_generic(void **levels, const size_t *sizes, const int *widths,
 
 	if (normal)
 		;			/* a direction has no gamut */
-	else if ([gamut caseInsensitiveCompare:@"sRGB"] == NSOrderedSame)
+	else if (gamut != NULL && strcmp(gamut, "sRGB") == 0)
 		gname = "atcColorGamutSRGB";
-	else if ([gamut caseInsensitiveCompare:@"DisplayP3"] == NSOrderedSame)
+	else if (gamut != NULL)
 		gname = "atcColorGamutDisplayP3";
 	text = header_write(levels, sizes, widths, heights, nlevels, name,
 	    format_atc_for(name, srgb, buf, sizeof(buf)), gname,
@@ -1772,7 +1915,7 @@ write_header_generic(void **levels, const size_t *sizes, const int *widths,
 static NSData *
 write_ktx2_generic(void **levels, const size_t *sizes, const int *widths,
     const int *heights, const int *depths, int nlevels, int faces,
-    bool array, const char *name, bool premultiplied, bool srgb,
+    bool array, bool p3, const char *name, bool premultiplied, bool srgb,
     NSString *options, bool annotate)
 {
 	struct format_dfd dfd;
@@ -1799,7 +1942,7 @@ write_ktx2_generic(void **levels, const size_t *sizes, const int *widths,
 	if (!srgb || !format_srgb_for(name, &srgb_gl, &vk))
 		vk = format_vk_for(name);
 	bytes = ktx2_write(levels, sizes, widths, heights, depths, nlevels,
-	    faces, array, vk, block_bytes, bx, by, type_size, &dfd,
+	    faces, array, p3, vk, block_bytes, bx, by, type_size, &dfd,
 	    premultiplied, srgb,
 	    annotate ? "Apple TextureConverter " TC_VERSION " / libktx v4.0" :
 	    "Unidentified app / libktx v4.0",
@@ -2186,6 +2329,8 @@ do_compress(NSArray<NSString *> *paths,
 		    "input textures!\n");
 		return (255);
 	}
+	if (!gamuts_ok(opts))
+		return (255);
 	if (opts[@"rgbm_encoding"] != nil && rgbm_range_of(opts) < 1.0f) {
 		short_usage();
 		fprintf(stderr, "Error: The value for the RGBM range must be "
@@ -2367,6 +2512,20 @@ do_compress(NSArray<NSString *> *paths,
 	}
 
 	/*
+	 * After the chain, before --gamma_out, and a slice at a time.  The
+	 * matrix is linear and so is the filter, so converting before the
+	 * chain and converting after it agree to within a unit in the last
+	 * place -- but they do differ there, and Apple's answer is this
+	 * one: the chain is filtered in the input gamut and every level
+	 * moved afterwards.
+	 */
+	if (!normal) {
+		for (i = 0; i < n; i++)
+			gamut_convert(levels[i], widths[i], heights[i],
+			    depths[i] > 1 ? depths[i] : 1,
+			    gamut_in_of(opts), gamut_of(opts));
+	}
+	/*
 	 * A gamma of one is no gamma at all, and skipping it is not just an
 	 * optimisation: the exponentiation clamps at zero, and the Kaiser
 	 * filter undershoots there, so running it would quietly lift every
@@ -2495,18 +2654,19 @@ do_compress(NSArray<NSString *> *paths,
 		        n, faces, [fmt UTF8String], srgb) :
 		    wants_header(output) ?
 		    write_header_generic(blocks, sizes, widths, heights,
-		        depths, n, faces, array, [fmt UTF8String], srgb,
-		        normal, output, opts) :
+		        depths, n, faces, array, gamut_of(opts),
+		        [fmt UTF8String], srgb, normal, output, opts) :
 		    wants_ktx2(output) ?
 		    write_ktx2_generic(blocks, sizes, widths, heights, depths,
-		        n, faces, array, [fmt UTF8String],
+		        n, faces, array, p3_gamut(opts, normal),
+		        [fmt UTF8String],
 		        alpha_mode_of(opts) == ALPHA_PREMULTIPLY, srgb,
 		        options, annotate) :
 		    write_ktx_generic(blocks, sizes, widths, heights, depths,
-		        n, faces, array, gl, base, type, type_size, gl_format,
-		        texel, metal,
-		        alpha_mode_of(opts) == ALPHA_PREMULTIPLY, options,
-		        annotate);
+		        n, faces, array, normal ? NULL : gamut_of(opts), gl,
+		        base, type, type_size, gl_format, texel, metal,
+		        alpha_mode_of(opts) == ALPHA_PREMULTIPLY, srgb,
+		        options, annotate);
 		if (data == nil) {
 			if (wants_dds(output))
 				return (0);
@@ -2767,6 +2927,8 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 		short_usage();
 		return (255);
 	}
+	if (!gamuts_ok(opts))
+		return (255);
 	if (data == nil || !ktx_parse([data bytes], [data length], &k)) {
 		printf("Error: Could not read input file!\n");
 		return (255);
@@ -2893,21 +3055,23 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 			    heights, NULL, n, 1, oname, false);
 		} else if (wants_header(out)) {
 			file = write_header_generic(outs, sizes, widths,
-			    heights, NULL, n, 1, false, oname, false, false,
-			    out, opts);
+			    heights, NULL, n, 1, false, gamut_in_of(opts),
+			    oname, false, false, out, opts);
 		} else if (wants_ktx2(out)) {
 			file = write_ktx2_generic(outs, sizes, widths,
-			    heights, NULL, n, 1, false, oname, false, false,
-			    options, annotate);
+			    heights, NULL, n, 1, false,
+			    gamut_in_of(opts) != NULL &&
+			    strcmp(gamut_in_of(opts), "DisplayP3") == 0,
+			    oname, false, false, options, annotate);
 		} else {
 			uint32_t texel = hdr ? 16 : (uint32_t)(
 			    obase == 0x1903 ? 1 : obase == 0x8227 ? 2 :
 			    obase == 0x1907 ? 3 : 4);
 
 			file = write_ktx_generic(outs, sizes, widths, heights,
-			    NULL, n, 1, false, ogl, obase,
+			    NULL, n, 1, false, gamut_in_of(opts), ogl, obase,
 			    hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, hdr ? 4 : 1,
-			    obase, texel, 0, false, options, annotate);
+			    obase, texel, 0, false, false, options, annotate);
 		}
 
 		for (i = 0; i < n; i++)

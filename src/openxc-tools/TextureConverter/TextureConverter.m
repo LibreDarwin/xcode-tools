@@ -657,6 +657,49 @@ load_container(NSString *path, enum alpha_mode amode, float **levels,
 	return (n == 0 ? -1 : n);
 }
 
+/*
+ * "Retaining <colour space>", which Apple print for some image types and
+ * not others.  It is not the pixels that decide it -- a TIFF, a HEIC, a
+ * WebP and a JPEG 2000 all come back from ImageIO in the same eight bit
+ * layout as a PNG, a JPEG, a TGA or a GIF -- but the type of the file, so
+ * this is a list, measured: those four print it and the rest do not.  The
+ * name is the decoded image's colour space, whatever its profile made it.
+ */
+static void
+print_retaining(NSString *path)
+{
+	static NSString *const types[] = { @"public.tiff", @"public.heic",
+	    @"org.webmproject.webp", @"public.jpeg-2000" };
+	CGImageSourceRef src = CGImageSourceCreateWithURL((__bridge CFURLRef)
+	    [NSURL fileURLWithPath:path], NULL);
+	NSString *type;
+	size_t i;
+
+	if (src == NULL)
+		return;
+	type = (__bridge NSString *)CGImageSourceGetType(src);
+	for (i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+		CGImageRef img;
+		CFStringRef name;
+
+		if (![type isEqualToString:types[i]])
+			continue;
+		img = CGImageSourceCreateImageAtIndex(src, 0, NULL);
+		name = img != NULL ?
+		    CGColorSpaceCopyName(CGImageGetColorSpace(img)) : NULL;
+		if (name != NULL) {
+			printf("Retaining %s\n",
+			    [(__bridge NSString *)name UTF8String]);
+			CFRelease(name);
+		} else
+			printf("Retaining unknown colorspace\n");
+		if (img != NULL)
+			CGImageRelease(img);
+		break;
+	}
+	CFRelease(src);
+}
+
 static float *
 load_rgba(NSString *path, enum alpha_mode amode, int *wp, int *hp)
 {
@@ -709,6 +752,7 @@ load_rgba(NSString *path, enum alpha_mode amode, int *wp, int *hp)
 	CFRelease(src);
 	if (img == NULL)
 		return (NULL);
+	print_retaining(path);
 
 	w = CGImageGetWidth(img);
 	h = CGImageGetHeight(img);
@@ -1826,7 +1870,8 @@ do_convert(NSArray<NSString *> *paths,
 		printf("Converting %s\n\n", [path UTF8String]);
 	/*
 	 * The second pass says what the first said, in the order it said
-	 * it: an EXR input's header dump, then any resize.
+	 * it: an EXR input's header dump or an image's "Retaining" line,
+	 * then any resize.
 	 *
 	 * ponytail: every dump then every resize; a combining mode fed EXRs
 	 * that also resize interleaves them per image in the first pass.
@@ -1838,6 +1883,8 @@ do_convert(NSArray<NSString *> *paths,
 		if (m.length == 4 &&
 		    memcmp(m.bytes, "\x76\x2f\x31\x01", 4) == 0)
 			exr_print_header([paths[i] fileSystemRepresentation]);
+		else
+			print_retaining(paths[i]);
 	}
 	for (i = 0; i < nresized; i++)
 		printf("Resized image to (width: %d, height: %d, "

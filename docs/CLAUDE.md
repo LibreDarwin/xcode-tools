@@ -975,6 +975,14 @@ them; here both are submodules at the tags 3.3.2 names, Imath v3.1.12 and
 libdeflate v1.18, handed to FetchContent as source directories so nothing
 is cloned.  See mk/port.d/openexr.mk.
 
+Apple print "Retaining <colour space>" for some inputs and not others,
+and the pixels do not decide it: a TIFF, a HEIC, a WebP and a JPEG 2000
+all come back from ImageIO in the same eight bit layout as a PNG, a JPEG,
+a TGA or a GIF.  The type of the file does, so it is a measured list --
+those four print it, the rest do not -- naming the decoded image's colour
+space, `kCGColorSpaceDisplayP3` for a P3 profile and so on.  Conversion
+prints it twice, before its banner and after, like a resize.
+
 EXR is read through OpenEXR too, not ImageIO.  ImageIO reads one, but it
 hands a two channel file back as a single channel with green gone, and
 Apple keep both -- because they read it this way, with channels the file
@@ -1305,12 +1313,18 @@ runs on one image write two different files.  There is nothing stable to
 match, so this tool says so and stops.
 
 JPEG input decodes differently: ImageIO's pixels, raw or drawn into a
-bitmap context, are a unit or two off Apple's in about one byte in six,
-which looks like chroma upsampling, so Apple are not decoding JPEG this
-way either.  TIFF and HEIC inputs match but Apple print "Retaining
-kCGColorSpaceSRGB" for them and not for PNG, BMP or JPEG, whose colour
-spaces are all the same sRGB -- the rule behind it is not known yet.  And
-BC7 mode 0.
+bitmap context, through seven vImage formats, 16-bit and float
+intermediates or NSImage, are all the same bytes, and Apple's are a unit
+or two off them in about one byte in six -- which looks like chroma
+upsampling, and is not reachable through any of those APIs.  Premultiplied
+TIFFs with a non-sRGB profile are a unit off too, and no integer
+unpremultiply fits -- truncating, rounding and ceiling all miss, with an
+error that grows with the channel value, which is what a colour-management
+transform looks like.  PSD input is off as well, and not by a unit: where ImageIO hands back a
+channel of 0 under an alpha of 254 Apple write 255, and elsewhere their
+values sit a couple above ImageIO's with no unpremultiply that fits --
+their decode is flattening the document some other way.  All three are
+left, being narrow and expensive.  And BC7 mode 0.
 
 Radiance HDR input matches already, RLE scanlines included: ImageIO hands
 it back as half float, the shape the EXR work taught the reader.

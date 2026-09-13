@@ -352,3 +352,6 @@
 [submodule "src/extras/imath"]
 	path = src/extras/imath
 	url = https://github.com/AcademySoftwareFoundation/Imath.git
+[submodule "src/extras/libdeflate"]
+	path = src/extras/libdeflate
+	url = https://github.com/ebiggers/libdeflate.git

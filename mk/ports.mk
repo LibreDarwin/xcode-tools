@@ -86,6 +86,7 @@ PORTS+=	extras/astc-encoder astcenc usr/local/lib
 PORTS+=	extras/stb stb usr/local/include
 PORTS+=	extras/etc2comp etc2comp usr/local/lib
 PORTS+=	extras/nvidia-texture-tools nvtt usr/local/lib
+PORTS+=	extras/openexr openexr usr/local/lib
 
 # Capstone, which machsec disassembles __TEXT with.  Library only, and it
 # has to come before machsec in mk/progs.mk -- which it does, since every

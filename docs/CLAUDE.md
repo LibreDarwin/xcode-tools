@@ -975,11 +975,16 @@ them; here both are submodules at the tags 3.3.2 names, Imath v3.1.12 and
 libdeflate v1.18, handed to FetchContent as source directories so nothing
 is cloned.  See mk/port.d/openexr.mk.
 
-EXR is read through ImageIO, which hands a half float image back as
-sixteen bit components with the float flag set: four of them for an RGBA
-or RGB file, one for a single channel one, never premultiplied.  That is
-the whole of the reader, and the levels it feeds are Apple's exactly for
-RGBA16, RGB16 and R16.
+EXR is read through OpenEXR too, not ImageIO.  ImageIO reads one, but it
+hands a two channel file back as a single channel with green gone, and
+Apple keep both -- because they read it this way, with channels the file
+lacks coming back as nothing and alpha as one.  They also print the whole
+header to stdout first, and that is not theirs but OpenEXRCore's
+exr_print_context_info at full verbosity, left on: its "flags longnames"
+is the reader's default name limit, not a bit in the file.  The conversion
+path prints it twice, before its banner and after, the way it prints a
+resize.  The half float path through ImageIO stays for Radiance HDR, which
+comes back in the same shape.
 
 An output whose extension is not one this tool writes falls back to KTX,
 which is what Apple do: `.png`, `.jpg`, `.tga`, `.xyz` and no extension at
@@ -1299,22 +1304,16 @@ inside the buffer is the stride-four read, the rest is garbage, and two
 runs on one image write two different files.  There is nothing stable to
 match, so this tool says so and stops.
 
-Two channel EXR input.  ImageIO reads an EXR back as half float
-components, which is all the reader here needed, and RGBA16, RGB16 and
-R16 come out byte for byte -- but an EXR with exactly two channels comes
-back from ImageIO as one, sixteen bits per pixel, with green gone.  Apple
-keep both, so they are not reading it this way.
+JPEG input decodes differently: ImageIO's pixels, raw or drawn into a
+bitmap context, are a unit or two off Apple's in about one byte in six,
+which looks like chroma upsampling, so Apple are not decoding JPEG this
+way either.  TIFF and HEIC inputs match but Apple print "Retaining
+kCGColorSpaceSRGB" for them and not for PNG, BMP or JPEG, whose colour
+spaces are all the same sRGB -- the rule behind it is not known yet.  And
+BC7 mode 0.
 
-The header dump.  Reading an EXR, Apple print the whole of its header to
-stdout the way `exrheader` does -- every attribute, in file order, with
-the channel list and the compression name and the two windows -- which is
-a debug print left in.  The file this tool writes is right and the chatter
-beside it is missing.  Reproducing it means parsing the header and
-formatting each attribute by type, and the flag line would need pinning
-down first: theirs says `flags longnames` for a file whose version word
-has no flag bits set at all.
-
-HDR input, which Apple's usage also lists, and BC7 mode 0.
+Radiance HDR input matches already, RLE scanlines included: ImageIO hands
+it back as half float, the shape the EXR work taught the reader.
 
 `--max_extent` announces itself: `Resized image to (width: %d, height:
 %d, depth: %d)`, once for every image it resized -- a face each for a

@@ -355,3 +355,6 @@
 [submodule "src/extras/libdeflate"]
 	path = src/extras/libdeflate
 	url = https://github.com/ebiggers/libdeflate.git
+[submodule "src/extras/openexr"]
+	path = src/extras/openexr
+	url = https://github.com/AcademySoftwareFoundation/openexr.git

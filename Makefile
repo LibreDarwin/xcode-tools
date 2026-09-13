@@ -26,7 +26,7 @@ TOP?=		${.CURDIR}
 
 RELEASE=	${TOP}/build/release
 
-all: dirs lib ports progs bundles sdk
+all: dirs lib ports progs bundles sdk ports-late
 	@${ECHO} "== xcode-tools build complete =="
 	@${ECHO} "   release tree: ${RELEASE}"
 
@@ -43,6 +43,10 @@ progs:
 
 ports:
 	${MAKE} -C ${TOP}/ports TOP=${TOP}
+
+# The ports built against the SDK, so after it; see PORTS_LATE.
+ports-late:
+	${MAKE} -C ${TOP}/ports TOP=${TOP} late
 
 bundles:
 	${MAKE} -f ${TOP}/mk/bundle.mk TOP=${TOP} bundles
@@ -109,6 +113,6 @@ clean-ports:
 distclean: clean clean-ports
 	rm -rf ${TOP}/build
 
-.PHONY: all dirs lib progs ports bundles check check-stale xnu-headers \
+.PHONY: all dirs lib progs ports ports-late bundles check check-stale xnu-headers \
 	list-progs list-ports \
 	clean clean-ports distclean

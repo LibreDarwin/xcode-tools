@@ -121,6 +121,11 @@ PORTS+=	swiftlang-llvm/swift swift ${XCTOOLCHAIN}/usr/bin
 # llvm-cbe reads the LLVM built above, so it comes after it.
 PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 
+# dyld_info and dyld_analyzer, from dyld's own project.  Late, because
+# they are built against the internal SDK, and the SDK is assembled after
+# the ports -- it needs the swift port's compiler.  See mk/port.d/dyld.mk.
+PORTS_LATE+=	apple/dyld dyld ${XCTOOLCHAIN}/usr/bin
+
 # ------------------------------------------------------------------
 # src/extras.  Tools this tree carries that Apple does not publish,
 # sorted by what they are rather than where they came from.  The

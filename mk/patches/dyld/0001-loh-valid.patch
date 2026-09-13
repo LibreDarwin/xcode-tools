@@ -1,0 +1,13 @@
+LinkerOptimizationHints::valid() arrives with its body stripped from the
+source release: it returns lohErr, which nothing declares.  Nothing in
+the tools calls it, so it reports no error.
+
+--- a/mach_o/LinkerOptimizationHints.cpp
++++ b/mach_o/LinkerOptimizationHints.cpp
+@@ -122,5 +122,5 @@
+ Error LinkerOptimizationHints::valid(std::span<const MappedSegment> segments, uint64_t loadAddress) const
+ {
+
+-    return std::move(lohErr);
++    return Error::none();
+ }

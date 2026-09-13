@@ -18,7 +18,7 @@ TOP?=		${.CURDIR}/..
 
 PORTS_OFF=	ports: disabled (MK_PORTS=no).  Enable with: bmake MK_PORTS=yes
 
-all clean list-ports:
+all clean late list-ports:
 	@${ECHO} "${PORTS_OFF}"
 
 check-ports:
@@ -46,14 +46,24 @@ clean:
 # thing to fail, since each drives a foreign build system.  check-ports
 # is the guard.
 check-ports:
-.for d p b in ${PORTS}
+.for d p b in ${PORTS} ${PORTS_LATE}
 	@${MAKE} -f ${TOP}/mk/port.mk TOP=${TOP} \
 		P_DIR=${d} P_NAME=${p} P_BIN=${b} check
 .endfor
 	@${ECHO} "check: every port produced its binaries"
 
+# The ports that need the SDK, which the top-level Makefile assembles
+# after the ports; it runs this once that is done.
+late:
+.for d p b in ${PORTS_LATE}
+.if empty(DISABLED_PROGS:M${p})
+	-@${MAKE} -f ${TOP}/mk/port.mk TOP=${TOP} \
+		P_DIR=${d} P_NAME=${p} P_BIN=${b}
+.endif
+.endfor
+
 print-installs:
-.for d p b in ${PORTS}
+.for d p b in ${PORTS} ${PORTS_LATE}
 .if empty(DISABLED_PROGS:M${p})
 	@${MAKE} -f ${TOP}/mk/port.mk TOP=${TOP} \
 		P_DIR=${d} P_NAME=${p} P_BIN=${b} print-installs
@@ -67,4 +77,4 @@ list-ports:
 
 .endif
 
-.PHONY: all clean check-ports list-ports print-installs
+.PHONY: all clean late check-ports list-ports print-installs

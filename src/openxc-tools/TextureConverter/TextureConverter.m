@@ -1065,6 +1065,54 @@ gamut_convert(float *rgba, int w, int h, int d, const char *from,
 }
 
 /*
+ * --gamma_in and --gamma_out take a number or the word sRGB, spelled that
+ * way exactly: Apple match the string before reaching for stof, and the
+ * match is case sensitive, so srgb and SRGB are numbers that do not parse.
+ *
+ * Returns 2 for the sRGB transfer, 1 for a power law with the exponent in
+ * *g, and 0 for a gamma of one, which is no transfer at all -- skipping it
+ * is not an optimisation, since the exponentiation clamps at zero and the
+ * Kaiser filter undershoots there.
+ */
+static int
+gamma_kind_of(NSDictionary<NSString *, NSString *> *opts, NSString *key,
+    float *g)
+{
+	NSString *v = opts[key];
+
+	if ([v isEqualToString:@"sRGB"])
+		return (2);
+	*g = [v floatValue];
+	return (*g == 1.0f ? 0 : 1);
+}
+
+/*
+ * Both of them checked.  Apple hand anything that is not sRGB to stof and
+ * let it throw, and what the caller sees is the exception's own words on
+ * stderr with nothing else to say which option it was.  Theirs, kept.
+ */
+static bool
+gammas_ok(NSDictionary<NSString *, NSString *> *opts)
+{
+	static NSString *const which[] = { @"gamma_in", @"gamma_out" };
+	size_t i;
+
+	for (i = 0; i < sizeof(which) / sizeof(which[0]); i++) {
+		NSString *v = opts[which[i]];
+		NSScanner *sc = [NSScanner scannerWithString:v];
+		float f;
+
+		if ([v isEqualToString:@"sRGB"])
+			continue;
+		if ([sc scanFloat:&f] && [sc scanLocation] > 0)
+			continue;
+		fprintf(stderr, "Error: stof: no conversion!\n");
+		return (false);
+	}
+	return (true);
+}
+
+/*
  * --gamut_in and --gamut_out.  Two gamuts exist, sRGB and DisplayP3, and
  * the names are matched without regard to case but written back the way
  * the usage spells them.  The output gamut is the one that counts, and it
@@ -1399,7 +1447,7 @@ do_convert(NSArray<NSString *> *paths,
 		    "input textures!\n");
 		return (255);
 	}
-	if (!gamuts_ok(opts))
+	if (!gamuts_ok(opts) || !gammas_ok(opts))
 		return (255);
 	if (opts[@"rgbm_encoding"] != nil && rgbm_range_of(opts) < 1.0f) {
 		short_usage();
@@ -1529,10 +1577,18 @@ do_convert(NSArray<NSString *> *paths,
 	 * same texels with --normal_map --gamma_in=2.2 as with --normal_map
 	 * alone, at every level.
 	 */
-	if (!normal && [opts[@"gamma_in"] floatValue] != 1.0f) {
-		for (i = 0; i < n; i++)
-			image_gamma(levels[i], widths[i], heights[i],
-			    [opts[@"gamma_in"] floatValue], 1);
+	if (!normal) {
+		float gin;
+		int kind = gamma_kind_of(opts, @"gamma_in", &gin);
+
+		for (i = 0; kind != 0 && i < n; i++) {
+			if (kind == 2)
+				image_srgb(levels[i], widths[i], heights[i],
+				    1);
+			else
+				image_gamma(levels[i], widths[i], heights[i],
+				    gin, 1);
+		}
 	}
 	{
 		int ow = widths[0], oh = heights[0], od = depths[0];
@@ -1641,10 +1697,18 @@ do_convert(NSArray<NSString *> *paths,
 	 * filter undershoots there, so running it would quietly lift every
 	 * negative sample the chain produced.
 	 */
-	if (!normal && [opts[@"gamma_out"] floatValue] != 1.0f) {
-		for (i = 0; i < n; i++)
-			image_gamma(levels[i], widths[i], heights[i],
-			    [opts[@"gamma_out"] floatValue], 0);
+	if (!normal) {
+		float gout;
+		int kind = gamma_kind_of(opts, @"gamma_out", &gout);
+
+		for (i = 0; kind != 0 && i < n; i++) {
+			if (kind == 2)
+				image_srgb(levels[i], widths[i], heights[i],
+				    0);
+			else
+				image_gamma(levels[i], widths[i], heights[i],
+				    gout, 0);
+		}
 	}
 
 	/*
@@ -2340,6 +2404,14 @@ do_compress(NSArray<NSString *> *paths,
 
 	printf("Using Compressor: %s\n", [compressor UTF8String]);
 
+	/*
+	 * After the compressor is named, which is where Apple's stof
+	 * throws: a bad gamut is caught before that line and a bad gamma
+	 * after it.
+	 */
+	if (!gammas_ok(opts))
+		return (255);
+
 
 	for (face = 0; face < faces; face++) {
 	depths[0] = 1;
@@ -2437,10 +2509,18 @@ do_compress(NSArray<NSString *> *paths,
 	 * same texels with --normal_map --gamma_in=2.2 as with --normal_map
 	 * alone, at every level.
 	 */
-	if (!normal && [opts[@"gamma_in"] floatValue] != 1.0f) {
-		for (i = 0; i < fn; i++)
-			image_gamma(levels[i], widths[i], heights[i],
-			    [opts[@"gamma_in"] floatValue], 1);
+	if (!normal) {
+		float gin;
+		int kind = gamma_kind_of(opts, @"gamma_in", &gin);
+
+		for (i = 0; kind != 0 && i < fn; i++) {
+			if (kind == 2)
+				image_srgb(levels[i], widths[i], heights[i],
+				    1);
+			else
+				image_gamma(levels[i], widths[i], heights[i],
+				    gin, 1);
+		}
 	}
 	{
 		int ow = widths[0], oh = heights[0], od = depths[0];
@@ -2531,10 +2611,18 @@ do_compress(NSArray<NSString *> *paths,
 	 * filter undershoots there, so running it would quietly lift every
 	 * negative sample the chain produced.
 	 */
-	if (!normal && [opts[@"gamma_out"] floatValue] != 1.0f) {
-		for (i = 0; i < n; i++)
-			image_gamma(levels[i], widths[i], heights[i],
-			    [opts[@"gamma_out"] floatValue], 0);
+	if (!normal) {
+		float gout;
+		int kind = gamma_kind_of(opts, @"gamma_out", &gout);
+
+		for (i = 0; kind != 0 && i < n; i++) {
+			if (kind == 2)
+				image_srgb(levels[i], widths[i], heights[i],
+				    0);
+			else
+				image_gamma(levels[i], widths[i], heights[i],
+				    gout, 0);
+		}
 	}
 
 	/*
@@ -2802,8 +2890,28 @@ to_byte(float v)
 	return ((uint8_t)((int)(v * 65535.0f + 0.5f) >> 8));
 }
 
+/*
+ * The same sample as a byte on the decompression path, which truncates
+ * where the compression path rounds through sixteen bits.  Nothing tells
+ * the two apart until a gamma is applied: a decompressed sample is a
+ * multiple of 1/255 and both rules return it unchanged, and it is only
+ * --gamma_in, which decompression applies in the encode direction, that
+ * produces a sample between two bytes.  Every one of 1023 of those lands
+ * on the truncation.
+ */
+static uint8_t
+to_byte_trunc(float v)
+{
+	if (!(v > 0.0f))
+		return (0);
+	if (v >= 1.0f)
+		return (255);
+	return ((uint8_t)(int)(v * 255.0f));
+}
+
 static uint8_t *
-pack_bytes(const float *rgba, int w, int h, int channels, size_t *out_len)
+pack_bytes_how(const float *rgba, int w, int h, int channels, bool trunc,
+    size_t *out_len)
 {
 	size_t stride = (size_t)w * (size_t)channels;
 	uint8_t *out = calloc((size_t)h, stride);
@@ -2816,12 +2924,19 @@ pack_bytes(const float *rgba, int w, int h, int channels, size_t *out_len)
 			for (c = 0; c < channels; c++)
 				out[(size_t)y * stride +
 				    (size_t)x * (size_t)channels + (size_t)c] =
-				    to_byte(rgba[((size_t)y * w + x) * 4 +
+				    (trunc ? to_byte_trunc : to_byte)(
+				    rgba[((size_t)y * w + x) * 4 +
 				    (size_t)c]);
 		}
 	}
 	*out_len = (size_t)h * stride;
 	return (out);
+}
+
+static uint8_t *
+pack_bytes(const float *rgba, int w, int h, int channels, size_t *out_len)
+{
+	return (pack_bytes_how(rgba, w, h, channels, false, out_len));
 }
 
 /* BGRA8: the same bytes as RGBA8 with red and blue exchanged. */
@@ -2927,7 +3042,7 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 		short_usage();
 		return (255);
 	}
-	if (!gamuts_ok(opts))
+	if (!gamuts_ok(opts) || !gammas_ok(opts))
 		return (255);
 	if (data == nil || !ktx_parse([data bytes], [data length], &k)) {
 		printf("Error: Could not read input file!\n");
@@ -3028,14 +3143,32 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 				ktx_free(&k);
 				return (255);
 			}
+			/*
+			 * --gamma_in, and in the encode direction, which is
+			 * the direction --gamma_out takes everywhere else.
+			 * Decompression reads the "in" option and ignores
+			 * the "out" one, as it does with the gamuts.
+			 */
+			{
+				float gin;
+				int kind = gamma_kind_of(opts, @"gamma_in",
+				    &gin);
+
+				if (kind == 2)
+					image_srgb(pixels, widths[i],
+					    heights[i], 0);
+				else if (kind == 1)
+					image_gamma(pixels, widths[i],
+					    heights[i], gin, 0);
+			}
 			if (hdr) {
 				outs[i] = pixels;
 				sizes[i] = (size_t)widths[i] * heights[i] *
 				    4 * sizeof(float);
 				continue;
 			}
-			outs[i] = pack_bytes(pixels, widths[i], heights[i],
-			    channels, &sizes[i]);
+			outs[i] = pack_bytes_how(pixels, widths[i],
+			    heights[i], channels, true, &sizes[i]);
 			free(pixels);
 		}
 		if (outs[i] == NULL) {
@@ -3049,8 +3182,8 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 		/*
 		 * Decompression records no options at all: Apple write
 		 * TC_Version and KTXwriter and stop, whatever was asked
-		 * for.  It is compressing nothing, so there is nothing
-		 * for the annotation to say.
+		 * for.  It is not compressing anything, so there is
+		 * nothing for the annotation to say.
 		 */
 		NSString *options = @"";
 		bool annotate = opts[@"disable_annotation"] == nil;

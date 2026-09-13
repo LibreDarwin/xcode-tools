@@ -61,7 +61,14 @@ to_unorm8(int v)
 {
 	int v16 = (v << 5) | (v >> 6);
 
-	return ((float)(v16 / 257) * (1.0f / 255.0f));
+	/*
+	 * The sixteen bit value itself, not the byte it reduces to.  The
+	 * two are the same file once the decompression path has truncated
+	 * to a byte -- 255/65535 is 1/257, so the floor of one is the
+	 * integer division of the other -- and they stop being the same
+	 * the moment --gamma_in puts a transfer between the two steps.
+	 */
+	return ((float)v16 * (1.0f / 65535.0f));
 }
 
 /*

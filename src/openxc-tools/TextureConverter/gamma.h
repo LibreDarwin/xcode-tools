@@ -18,6 +18,12 @@ extern "C" {
  */
 void	image_gamma(float *rgba, int w, int h, float gamma, int to_linear);
 
+/*
+ * The sRGB transfer over the same channels, which is what --gamma_in=sRGB
+ * and --gamma_out=sRGB ask for.
+ */
+void	image_srgb(float *rgba, int w, int h, int to_linear);
+
 #ifdef __cplusplus
 }
 #endif

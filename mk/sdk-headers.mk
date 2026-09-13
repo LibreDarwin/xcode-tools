@@ -82,6 +82,7 @@ LIBDISPATCH=	${TOP}/src/apple/libdispatch
 LLVM_BUILD=	${TOP}/build/ports/llvm/build
 MSUN=		${TOP}/lib/msun
 DYLD=		${TOP}/src/apple/dyld
+CCTOOLS=	${TOP}/src/apple/distribution-Developer_Tools/cctools
 SWIFT_LIB=	${TOP}/build/ports/swift/build/lib/swift/macosx
 SWIFT_SHIMS=	${TOP}/build/ports/swift/build/lib/swift/shims
 SWIFTC=		${TOP}/build/ports/swift/build/bin/swiftc
@@ -378,6 +379,14 @@ sdk-headers:
 	# includes these, and nothing else in the tree provides them.
 	@mkdir -p ${SDK_INC}/mach-o
 	@cp -Rf ${XNU}/EXTERNAL_HEADERS/mach-o/. ${SDK_INC}/mach-o/ 2>/dev/null || true
+	# xnu's copies are older than the SDK's -- no fat_arch_64, no
+	# PLATFORM_FIRMWARE, which dyld's own tools use.  cctools' are what
+	# Apple's SDK carries: fat.h, nlist.h, stab.h and the reloc.h set
+	# are byte-identical to Xcode's, and loader.h differs only by the
+	# __OPEN_SOURCE__ guards the SDK install strips.
+.for h in fat.h loader.h nlist.h reloc.h stab.h arm/reloc.h arm64/reloc.h x86_64/reloc.h
+	@cp -f ${CCTOOLS}/include/mach-o/${h} ${SDK_INC}/mach-o/${h} 2>/dev/null || true
+.endfor
 
 	# The dynamic loader's headers.  dlfcn.h is the one everything
 	# wants -- dlopen and dlsym live nowhere else, and it is what
@@ -1290,6 +1299,9 @@ sdk-internal: sdk-headers sdk-modulemap sdk-stubs sdk-swift sdk-overlay sdk-fram
 	@cp -f ${SYSLOG}/libsystem_asl.tproj/include/*.h \
 	    ${INTERNAL_SDK}/usr/local/include/ 2>/dev/null || true
 	@rm -f ${INTERNAL_SDK}/usr/local/include/asl.h
+	# libplatform's private headers: _simple.h, os/lock_private.h and
+	# the rest, which dyld and libmalloc include by those names.
+	@cp -Rf ${LIBPLATFORM}/private/. ${INTERNAL_SDK}/usr/local/include/ 2>/dev/null || true
 	# usr/include/System, which is how Apple's own projects reach the
 	# System.framework private headers -- libarchive says
 	# #include <System/sys/fsctl.h>.  The fakeroot's PrivateHeaders is

@@ -4,7 +4,7 @@
 #
 # A Python package with a console script, so this lays it down the way the
 # pip and 2to3 ports lay theirs down: the packages into the interpreter's
-# site-packages, the script into the toolchain's bin.  Four packages, not
+# site-packages, the script into its bin.  Four packages, not
 # one -- ktool is the front end, ktool_macho and ktool_swift are the
 # parsers, and lib0cyn is the shared support -- plus Pygments, which it
 # highlights its output with.

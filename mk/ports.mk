@@ -95,11 +95,12 @@ PORTS+=	extras/capstone capstone usr/local/lib
 
 # ------------------------------------------------------------------
 # Go, and ipsw which is written in it.  Neither is something Xcode
-# ships, so both go to usr/local.  Go is pinned to a release tag --
-# see mk/port.d/go.mk for the bootstrap it needs.
+# ships: Go goes to usr/local, and ipsw, which takes firmware apart,
+# to opt/bin with the rest of the extras below.  Go is pinned to a
+# release tag -- see mk/port.d/go.mk for the bootstrap it needs.
 # ------------------------------------------------------------------
 PORTS+=	golang/go go usr/local/bin
-PORTS+=	extras/ipsw ipsw usr/local/bin
+PORTS+=	extras/ipsw ipsw opt/bin
 
 # ------------------------------------------------------------------
 # LLVM and Clang.  By far the longest build in the tree -- most of an
@@ -122,30 +123,32 @@ PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 
 # ------------------------------------------------------------------
 # src/extras.  Tools this tree carries that Apple does not publish,
-# sorted by what they are rather than where they came from: anything
-# that works on Mach-O or on a build goes to the toolchain beside
-# clang and ld, and the general utilities go to usr/local/bin, which
-# is the same reasoning bmake and bsdmake follow above.
+# sorted by what they are rather than where they came from.  The
+# toolchain carries only what a build uses -- bldd here and llvm-cbe
+# above.  Everything for taking binaries, bundles and firmware apart
+# goes to opt/bin, off every path Xcode's own layout defines, and the
+# general utilities go to usr/local/bin, which is the same reasoning
+# bmake and bsdmake follow above.
 # ------------------------------------------------------------------
-PORTS+=	extras/ldid ldid ${XCTOOLCHAIN}/usr/bin
-PORTS+=	extras/snaputil snaputil usr/local/bin
 PORTS+=	extras/bldd bldd ${XCTOOLCHAIN}/usr/bin
+PORTS+=	extras/ldid ldid opt/bin
+PORTS+=	extras/zsign zsign opt/bin
+PORTS+=	extras/patchelf patchelf opt/bin
+PORTS+=	extras/unxip unxip opt/bin
+PORTS+=	extras/snaputil snaputil opt/bin
 PORTS+=	extras/arm64th forth usr/local/bin
-PORTS+=	extras/zsign zsign usr/local/bin
 PORTS+=	extras/bsdiff bsdiff usr/local/bin
-PORTS+=	extras/patchelf patchelf usr/local/bin
-PORTS+=	extras/unxip unxip usr/local/bin
 
 # macho, an Xcode project rather than a Makefile; see mk/port.d/macho.mk
 # for why it is a port and not a mk/tool.mk entry.  Its own submodules have
 # to be checked out for this to build -- git submodule update --init
 # --recursive src/extras/macho.
-PORTS+=	extras/macho macho ${XCTOOLCHAIN}/usr/bin
+PORTS+=	extras/macho macho opt/bin
 
 # ktool, a Python package rather than a build.  After python/cpython for
 # the same reason pip and 2to3 are: it installs into that interpreter's
 # site-packages.
-PORTS+=	extras/ktool ktool ${XCTOOLCHAIN}/usr/bin
+PORTS+=	extras/ktool ktool opt/bin
 
 # Compatibility libraries and libplist.  These are not tools; they are
 # carried so that source written for Linux or BSD, and code that speaks

@@ -1,7 +1,7 @@
 # zsign -- sign iOS application bundles.
 #
-# A signing utility rather than part of the toolchain's Mach-O
-# handling, so usr/local/bin.  Its Makefile lives under build/macos
+# Re-signs other people's bundles rather than signing our builds, so
+# opt/bin beside ldid.  Its Makefile lives under build/macos
 # rather than at the top, so make is pointed at it.
 P_BUILDSYS=	make
 P_MAKE_ARGS=	-C build/macos

@@ -1,8 +1,8 @@
 # ktool -- reads Mach-O: load commands, symbols, the Objective-C and Swift
 # metadata, and it can generate headers back out of a binary.
 #
-# The toolchain, not usr/local: by the rule mk/ports.mk states for
-# src/extras, a tool that works on Mach-O belongs beside clang and ld.
+# opt/bin, by the rule mk/ports.mk states for src/extras: it takes
+# binaries apart rather than building them.
 #
 # A Python package, so it installs rather than builds, and it has to follow
 # python/cpython in PORTS for the same reason pip and 2to3 do: the version

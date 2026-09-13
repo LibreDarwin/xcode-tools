@@ -3,9 +3,9 @@
 # pbzx stream inside it, and Archive Utility is the only thing that knows
 # the whole shape.
 #
-# usr/local/bin.  It is an archive utility, not a Mach-O or build tool, so
-# by the rule mk/ports.mk states for src/extras it goes there rather than
-# into the toolchain.
+# opt/bin.  It takes Apple's packaging apart rather than building
+# anything, so by the rule mk/ports.mk states for src/extras it goes there
+# rather than into the toolchain.
 #
 # A Swift package, so swift build rather than a Makefile.  --scratch-path
 # is the point of the arguments: SwiftPM would otherwise put .build inside

@@ -6,7 +6,8 @@
 # and runs natively -- given an ELF it parses the header and reports on
 # it -- so it is carried rather than cross-built.
 #
-# A general utility, not part of the Mach-O toolchain, so usr/local/bin.
+# It rewrites other platforms' binaries rather than building ours, so
+# opt/bin with the rest of the extras.
 P_BUILDSYS=	cmake
 P_CMAKE_SRC=	.
 P_OBJDIR=	${P_WORKDIR}/build

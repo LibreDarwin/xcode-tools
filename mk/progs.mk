@@ -205,10 +205,10 @@ PROGS+=	extras/jonesforth-macos jonesforth usr/local/bin
 # machsec (src/extras/machsec) -- reports the hardening a Mach-O binary
 # was built with.
 #
-# The toolchain, not usr/local: by the rule mk/ports.mk states for
-# src/extras, a tool that works on Mach-O belongs beside clang and ld.
+# opt/bin, by the rule mk/ports.mk states for src/extras: it takes
+# binaries apart rather than building them.
 #
 # Needs the capstone port, which mk/ports.mk builds; every port is
 # built before any program, so the ordering holds.
 # ------------------------------------------------------------------
-PROGS+=	extras/machsec machsec ${XCTOOLCHAIN}/usr/bin
+PROGS+=	extras/machsec machsec opt/bin

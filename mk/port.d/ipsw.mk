@@ -1,7 +1,7 @@
 # ipsw -- read and take apart Apple firmware.
 #
 # Written in Go, which is why the Go toolchain above it exists in this
-# tree at all.  Xcode ships nothing like it, so usr/local/bin.
+# tree at all.  Xcode ships nothing like it, so opt/bin.
 #
 # Built with the Go this tree builds, not whatever is on PATH: GOROOT
 # points at usr/local/go, so the port depends on the go port having run

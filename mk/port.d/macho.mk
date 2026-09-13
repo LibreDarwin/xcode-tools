@@ -1,8 +1,8 @@
 # macho -- a Mach-O parser and dumper: load commands, segments, sections,
 # symbols, and the images inside a dyld shared cache.
 #
-# The toolchain, not usr/local: by the rule mk/ports.mk states for
-# src/extras, a tool that works on Mach-O belongs beside clang and ld.
+# opt/bin, by the rule mk/ports.mk states for src/extras: it takes
+# binaries apart rather than building them.
 #
 # A port rather than a mk/tool.mk entry, which is what everything else
 # imported here is.  The reason is a name: the project's own XS++ library

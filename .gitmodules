@@ -349,3 +349,6 @@
 	path = src/extras/pygments
 	url = https://github.com/pygments/pygments.git
 	branch = master
+[submodule "src/extras/imath"]
+	path = src/extras/imath
+	url = https://github.com/AcademySoftwareFoundation/Imath.git

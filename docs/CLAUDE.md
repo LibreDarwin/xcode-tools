@@ -965,6 +965,35 @@ undershoots there, so running it would lift every negative sample the
 chain produced -- which is what the default gamma of 1.000000 does if the
 option is read as present rather than as a value.
 
+`--gamma_in` and `--gamma_out` take a number or the word sRGB, and the
+word is matched literally: `srgb` and `SRGB` are not it, so they go to
+stof, which throws, and the caller sees `Error: stof: no conversion!` on
+stderr with nothing to say which option it was.  Theirs, kept -- as is
+where it lands: a bad gamut is caught before `Using Compressor:` is
+printed and a bad gamma after it.
+
+The decode is the standard transfer, 0.04045 and 2.4.  The encode is not:
+it is NVTT's, whose exponent is 0.41666 where the standard says five
+twelfths, and that shows in the sixth digit of every sample.  Matching it
+took the constant rather than the formula.
+
+Decompression reads this pair the way it reads the gamuts -- `--gamma_in`
+and not `--gamma_out` -- and applies it in the *encode* direction, which
+is the direction `--gamma_out` takes everywhere else.  That turned up two
+more things.  Decompression truncates when it packs a byte where
+compression rounds through sixteen bits, and nothing could tell the two
+apart until now: every decompressed sample was a multiple of 1/255 and
+both rules return it unchanged, and only a gamma puts a sample between two
+bytes.  All 1023 of those land on the truncation.  And the EAC decoder had
+been narrowing to a byte inside itself, which the truncation then hid;
+handing back the sixteen bit value instead leaves the plain output
+identical -- 255/65535 is 1/257, so the floor of one is the integer
+division of the other -- and gives the transfer the sample it needs.
+
+Decompression also records no `TC_Options` at all, whatever it was asked
+for: it is compressing nothing, so there is nothing for the annotation to
+say.
+
 `--gamut_in` and `--gamut_out` take sRGB or DisplayP3, matched without
 regard to case and written back the way the usage spells them.  Anything
 else is refused with the usage on stdout and the complaint on stderr --

@@ -230,6 +230,7 @@ static void alpha_to_coverage(float **levels, const int *widths,
     NSDictionary<NSString *, NSString *> *opts);
 static bool wants_header(NSString *output);
 static bool wants_exr(NSString *output);
+static float from_half(uint16_t h);
 static int exr_refusal(NSString *output, const char *name, bool srgb,
     int nlevels);
 static bool wants_dds(NSString *output);
@@ -667,6 +668,7 @@ load_rgba(NSString *path, enum alpha_mode amode, int *wp, int *hp)
 	size_t w, h, bpc, bpp, stride, x, y;
 	CGImageAlphaInfo alpha;
 	bool has_alpha, alpha_first, premultiplied, any_alpha = false;
+	bool half;
 
 	src = CGImageSourceCreateWithURL((__bridge CFURLRef)
 	    [NSURL fileURLWithPath:path], NULL);
@@ -685,13 +687,20 @@ load_rgba(NSString *path, enum alpha_mode amode, int *wp, int *hp)
 	alpha = CGImageGetAlphaInfo(img);
 
 	/*
-	 * Only the eight bit layouts are read directly; anything else --
-	 * sixteen bit, floating point, indexed, CMYK -- would need the
-	 * conversion a bitmap context does, and is not handled yet.
+	 * Eight bit layouts are read directly, and so are the half float
+	 * ones an EXR comes back as -- ImageIO hands those over as sixteen
+	 * bit components with the float flag set, four of them or one.
+	 * Anything else -- sixteen bit integer, single precision, indexed,
+	 * CMYK -- would need the conversion a bitmap context does, and is
+	 * not handled yet.
 	 */
-	if (w == 0 || h == 0 || bpc != 8 || (bpp != 24 && bpp != 32) ||
-	    (CGImageGetBitmapInfo(img) & kCGBitmapByteOrderMask) ==
-	    kCGBitmapByteOrder32Little) {
+	half = bpc == 16 &&
+	    (CGImageGetBitmapInfo(img) & kCGBitmapFloatComponents) != 0;
+	if (w == 0 || h == 0 ||
+	    (half ? (bpp != 64 && bpp != 16) :
+	     (bpc != 8 || (bpp != 24 && bpp != 32) ||
+	      (CGImageGetBitmapInfo(img) & kCGBitmapByteOrderMask) ==
+	      kCGBitmapByteOrder32Little))) {
 		CGImageRelease(img);
 		return (NULL);
 	}
@@ -754,6 +763,25 @@ load_rgba(NSString *path, enum alpha_mode amode, int *wp, int *hp)
 			float *o = out + (y * w + x) * 4;
 			unsigned r, g, b, a;
 
+			if (half) {
+				/*
+				 * The half float layouts, which is what an
+				 * EXR comes back as: four components or
+				 * one, and never premultiplied.
+				 */
+				const uint16_t *hp16 = (const uint16_t *)p;
+
+				o[0] = from_half(hp16[0]);
+				o[1] = bpp == 64 ? from_half(hp16[1]) : 0.0f;
+				o[2] = bpp == 64 ? from_half(hp16[2]) : 0.0f;
+				o[3] = bpp == 64 && has_alpha ?
+				    from_half(hp16[3]) : 1.0f;
+				if (o[3] != 0.0f)
+					any_alpha = true;
+				if (amode == ALPHA_IGNORE)
+					o[3] = 1.0f;
+				continue;
+			}
 			if (alpha_first) {
 				a = p[0];
 				r = p[1];

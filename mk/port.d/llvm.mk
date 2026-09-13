@@ -57,7 +57,7 @@ P_CMAKE_SRC=	llvm
 # property, so the check is answered in the negative rather than the flag
 # being fought.
 P_CONFIGURE_ARGS=	\
-	-DLLVM_ENABLE_PROJECTS="clang;lld" \
+	-DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld" \
 	-DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi" \
 	-DRUNTIMES_CMAKE_ARGS="-DLIBCXXABI_USE_LLVM_UNWINDER=OFF" \
 	-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
@@ -100,6 +100,13 @@ P_NOSTAGE=	yes
 # edit and inspect.  Each also builds the aliases beside it (ld.lld,
 # llvm-ranlib, llvm-strip, llvm-readelf), which bundle-aliases links.
 #
+# The rest of what Apple's toolchain carries from this tree: c++filt and
+# readtapi are its aliases for llvm-cxxfilt and llvm-readtapi, llvm-cas
+# and clang-cas-test are the compilation cache's inspectors, and
+# clang-format and clangd are the editor half -- clangd is why
+# clang-tools-extra is enabled at all.  clang-stat-cache is Apple's own
+# and is not in this llvm-project.
+#
 # llvm-libraries and clang-libraries are the whole static library sets,
 # not just the ones the tools above happen to pull in.  Swift links both
 # directly and needs more of them than we ship binaries for -- MCJIT and
@@ -110,6 +117,8 @@ P_MAKE_ARGS=	clang llvm-nm llvm-otool llvm-objdump llvm-size \
 		llvm-strings dsymutil llvm-dwarfdump llvm-cov \
 		llvm-profdata libtapi \
 		lld llvm-ar llvm-objcopy llvm-readobj \
+		llvm-cxxfilt llvm-readtapi llvm-cas clang-cas-test \
+		clang-format clangd \
 		llvm-libraries clang-libraries \
 		LTO libclang libIndexStore.dylib \
 		runtimes
@@ -152,7 +161,13 @@ P_PROGS=	bin/clang \
 		bin/dsymutil \
 		bin/llvm-dwarfdump \
 		bin/llvm-cov \
-		bin/llvm-profdata
+		bin/llvm-profdata \
+		bin/llvm-cxxfilt \
+		bin/llvm-readtapi \
+		bin/llvm-cas \
+		bin/clang-cas-test \
+		bin/clang-format \
+		bin/clangd
 
 # tapi is built from a patched copy rather than the submodule: it calls
 # llvm_check_linker_flag(), a helper current llvm-project no longer

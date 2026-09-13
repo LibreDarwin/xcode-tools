@@ -660,6 +660,36 @@ load_container(NSString *path, enum alpha_mode amode, float **levels,
 static float *
 load_rgba(NSString *path, enum alpha_mode amode, int *wp, int *hp)
 {
+	/*
+	 * An EXR goes through OpenEXR rather than ImageIO -- see exr.cpp --
+	 * recognised by its magic number rather than its name, as ImageIO
+	 * would have recognised it.
+	 */
+	{
+		NSFileHandle *fh = [NSFileHandle fileHandleForReadingAtPath:path];
+		NSData *magic = [fh readDataOfLength:4];
+		static const uint8_t exr_magic[4] = { 0x76, 0x2f, 0x31, 0x01 };
+
+		[fh closeFile];
+		if (magic.length == 4 &&
+		    memcmp(magic.bytes, exr_magic, 4) == 0) {
+			int ew, eh;
+			float *e = exr_read_rgba([path fileSystemRepresentation],
+			    &ew, &eh);
+
+			if (e != NULL && amode == ALPHA_IGNORE) {
+				for (size_t i = 0; i < (size_t)ew * (size_t)eh;
+				    i++)
+					e[i * 4 + 3] = 1.0f;
+			}
+			if (e != NULL) {
+				*wp = ew;
+				*hp = eh;
+			}
+			return (e);
+		}
+	}
+
 	const float inv255 = 1.0f / 255.0f;
 	CGImageSourceRef src;
 	CGImageRef img;
@@ -1794,6 +1824,21 @@ do_convert(NSArray<NSString *> *paths,
 		    [output UTF8String]);
 	else
 		printf("Converting %s\n\n", [path UTF8String]);
+	/*
+	 * The second pass says what the first said, in the order it said
+	 * it: an EXR input's header dump, then any resize.
+	 *
+	 * ponytail: every dump then every resize; a combining mode fed EXRs
+	 * that also resize interleaves them per image in the first pass.
+	 */
+	for (i = 0; i < (int)paths.count; i++) {
+		NSData *m = [[NSFileHandle fileHandleForReadingAtPath:paths[i]]
+		    readDataOfLength:4];
+
+		if (m.length == 4 &&
+		    memcmp(m.bytes, "\x76\x2f\x31\x01", 4) == 0)
+			exr_print_header([paths[i] fileSystemRepresentation]);
+	}
 	for (i = 0; i < nresized; i++)
 		printf("Resized image to (width: %d, height: %d, "
 		    "depth: %d)\n", widths[0], heights[0],

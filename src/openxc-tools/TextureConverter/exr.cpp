@@ -21,9 +21,12 @@
 #include <OpenEXR/ImfCompression.h>
 #include <OpenEXR/ImfFrameBuffer.h>
 #include <OpenEXR/ImfHeader.h>
+#include <OpenEXR/ImfInputFile.h>
 #include <OpenEXR/ImfOutputFile.h>
+#include <OpenEXR/openexr.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -60,4 +63,76 @@ exr_write_rgba16(const char *path, const void *halves, int w, int h)
 		return (-1);
 	}
 	return (0);
+}
+
+/*
+ * The header dump on its own, for the conversion path, which prints it a
+ * second time after its banner the way it prints a resize twice.
+ */
+extern "C" int
+exr_print_header(const char *path)
+{
+	exr_context_initializer_t init = EXR_DEFAULT_CONTEXT_INITIALIZER;
+	exr_context_t ctxt = NULL;
+
+	if (exr_start_read(&ctxt, path, &init) != EXR_ERR_SUCCESS)
+		return (-1);
+	exr_print_context_info(ctxt, 1);
+	exr_finish(&ctxt);
+	return (0);
+}
+
+/*
+ * Reading one, through OpenEXR as well.  ImageIO reads an EXR too, but it
+ * hands a two channel file back as one channel with green gone, and Apple
+ * keep both -- because they read it this way.
+ *
+ * They also print its whole header first, and that is not theirs but
+ * OpenEXRCore's exr_print_context_info at full verbosity, left switched
+ * on.  Its "flags longnames" is not a flag bit in the file: it is the
+ * reader's name limit, which is the long one by default.
+ *
+ * Channels the file does not have come back as nothing, and alpha as one.
+ * Returns a malloc'd RGBA float image, top row first, or NULL.
+ */
+extern "C" float *
+exr_read_rgba(const char *path, int *wp, int *hp)
+{
+	static const char *const names[4] = { "R", "G", "B", "A" };
+	float *out = NULL;
+
+	if (exr_print_header(path) != 0)
+		return (NULL);
+
+	try {
+		Imf::InputFile in(path);
+		const Imath::Box2i &dw = in.header().dataWindow();
+		int w = dw.max.x - dw.min.x + 1, h = dw.max.y - dw.min.y + 1;
+		std::vector<float> plane[4];
+		Imf::FrameBuffer fb;
+		int c;
+
+		for (c = 0; c < 4; c++) {
+			plane[c].resize((size_t)w * (size_t)h);
+			fb.insert(names[c], Imf::Slice(Imf::FLOAT,
+			    (char *)plane[c].data() -
+			    (dw.min.x + (ptrdiff_t)dw.min.y * w) * 4,
+			    sizeof(float), sizeof(float) * (size_t)w, 1, 1,
+			    c == 3 ? 1.0 : 0.0));
+		}
+		in.setFrameBuffer(fb);
+		in.readPixels(dw.min.y, dw.max.y);
+		out = (float *)malloc((size_t)w * (size_t)h * 4 * sizeof(*out));
+		if (out == NULL)
+			return (NULL);
+		for (size_t i = 0; i < (size_t)w * (size_t)h; i++)
+			for (c = 0; c < 4; c++)
+				out[i * 4 + (size_t)c] = plane[c][i];
+		*wp = w;
+		*hp = h;
+	} catch (...) {
+		free(out);
+		return (NULL);
+	}
+	return (out);
 }

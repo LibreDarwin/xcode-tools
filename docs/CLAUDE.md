@@ -1513,6 +1513,38 @@ Building today:
 | `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd` | 21.1.6 | our own build |
 | `dyld` (late) — `dyld_info`, `dyld_analyzer` | dyld-1378 | `dyld_analyzer` yes; `dyld_info` all but `udot`/`sdot` in `-disassemble` |
 | `llbuild` — `swift-build-tool` | swift-6.3 snapshot, `llbuild-24700.0.19` | yes |
+| `swift-driver` — `swift-driver`, `swift-help`, `libSwiftToolsSupport.dylib` (with `swift-argument-parser` and `swift-tools-support-core`) | swift-6.3.3, reports 1.148.6 | compiles, diagnostics and errors yes; see below |
+
+`swiftc` hands every compile to a `swift-driver` beside it, and falls back
+to the deprecated C++ driver, with a warning, when there is none. The driver
+is four CMake ports built with this tree's `swiftc`
+(`mk/with-swift-cmake.mk`, which also names the SDK — CMake gives swiftc none
+when it links, and the link fails on `-lobjc`): the argument parser and
+llbuild's Swift bindings are linked in statically; swift-tools-support-core is
+linked into one `libSwiftToolsSupport.dylib`, the SwiftPM product Apple's
+toolchain carries, and handed to the driver's CMake through a `TSCConfig` of
+our own. The driver needs the swift port's `lib_InternalSwiftScan.dylib` in
+`lib/swift/host` — as a symlink into `host/compiler`, where it can load its
+`lib_Compiler*` libraries; a plain copy in `host` fails to load and the
+driver warns on every compile.
+
+Against Apple's, the compile itself, diagnostics, a missing file, a bad
+option and `-emit-module` match. What does not:
+
+- The version: `Swift version 6.3.3 (swift-6.3.3-RELEASE)` where Apple's
+  says `Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)`.
+  This release's `lib/Basic/Version.cpp` writes that parenthesis as a
+  literal; the `swiftlang`/`clang` form is Apple's own build.
+- The frontend job: Apple's driver adds `-stack-check`, `-new-driver-path`
+  and `-disable-clang-spi` and orders the plugin paths differently. Nothing
+  in the published driver emits those.
+- `swift-help` and `swiftc -help` lack `-target-arch-variant`,
+  `-swift-ptrauth-mode` and `-sign-class-ro`, and `libSwiftToolsSupport`
+  lacks about a hundred symbols Apple's has (`TracingEvent`, `orderedZip`):
+  both come from sources newer than any published tag.
+- Apple's `swift-driver` links `llbuild.framework` from
+  `Xcode.app/Contents/SharedFrameworks`, outside the toolchain; ours has it
+  linked in, and so also links libsqlite3, libncurses and libc++.
 
 `c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
 source for either, so both are written from what Apple's pass to the clang
@@ -1686,9 +1718,9 @@ build. Each is here with what stands in the way.
 - **`gm4`, `bison`** — carried, and blocked by their bundled gnulib; see
   `mk/ports.mk`.
 - **`swift-plugin-server`** — not a target this Swift configuration
-  generates. `swift-driver`, and `swift-package`, `sourcekit-lsp`,
-  `swift-format`, `docc` and `swift-help` beyond it, need SwiftPM packages or
-  repositories this tree does not have yet.
+  generates. `swift-package`, `swift-build`, `sourcekit-lsp`, `swift-format`
+  and `docc` need SwiftPM, SwiftBuild and repositories this tree does not
+  have yet.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,

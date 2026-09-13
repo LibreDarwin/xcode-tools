@@ -965,6 +965,16 @@ undershoots there, so running it would lift every negative sample the
 chain produced -- which is what the default gamma of 1.000000 does if the
 option is read as present rather than as a value.
 
+EXR is written through OpenEXR, which is what Apple link: 3.3.2,
+statically, with Imath 3.1 -- the symbols are Imf_3_3 and Imath_3_1 and
+the version string is in their binary.  A single level of RGBA16 is
+OpenEXR's OutputFile with the default header, the four channels as halves,
+PIZ compression and rows top first, and it comes out byte for byte theirs.
+OpenEXR fetches Imath and libdeflate from the network when it cannot find
+them; here both are submodules at the tags 3.3.2 names, Imath v3.1.12 and
+libdeflate v1.18, handed to FetchContent as source directories so nothing
+is cloned.  See mk/port.d/openexr.mk.
+
 EXR is read through ImageIO, which hands a half float image back as
 sixteen bit components with the float flag set: four of them for an RGBA
 or RGB file, one for a single channel one, never premultiplied.  That is
@@ -1282,13 +1292,12 @@ texture and not the level.  Two slices at least, and DDS gets none.
 
 Still to write, in the order they are worth doing:
 
-EXR output, which is the one thing here that needs a library this tree
-does not carry.  Apple write a single level of RGBA16, R16, RG16 or RGB16
-as PIZ compressed OpenEXR -- a wavelet and a Huffman coder -- so matching
-it byte for byte means OpenEXR itself rather than a second implementation
-of it.  Everything around it is in place: the two refusals are exact, and
-the case they leave says so and stops rather than writing a KTX with an
-.exr on the end, which is what happened before.
+EXR output of R16, RG16 and RGB16.  Apple do not refuse these, but their
+writer reads every format four halves to a texel, so for fewer channels
+it runs off the end of the level into whatever the heap holds: the part
+inside the buffer is the stride-four read, the rest is garbage, and two
+runs on one image write two different files.  There is nothing stable to
+match, so this tool says so and stops.
 
 Two channel EXR input.  ImageIO reads an EXR back as half float
 components, which is all the reader here needed, and RGBA16, RGB16 and

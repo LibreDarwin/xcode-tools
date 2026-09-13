@@ -109,6 +109,11 @@ PROGS+=	apple/distribution-Developer_Tools/cctools/misc vtool ${XCTOOLCHAIN}/usr
 PROGS+=	apple/distribution-Developer_Tools/cctools/ar ar ${XCTOOLCHAIN}/usr/bin
 PROGS+=	apple/distribution-Developer_Tools/cctools/otool otool-classic ${XCTOOLCHAIN}/usr/bin
 
+# c89 and c99, the POSIX compiler commands.  Apple publish no source for
+# either; ours are written from what theirs pass to clang.
+PROGS+=	openxc-tools/c89 c89 ${XCTOOLCHAIN}/usr/bin
+PROGS+=	openxc-tools/c99 c99 ${XCTOOLCHAIN}/usr/bin
+
 # mig and migcom, from bootstrap_cmds.  Most of an SDK's mach/ headers
 # are mig's output rather than files anyone wrote, so these come before
 # anything that wants them.  migcom goes in libexec because that is

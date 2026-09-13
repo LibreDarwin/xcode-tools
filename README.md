@@ -73,7 +73,8 @@ done.
 | `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools, `dsymutil`, developer_cmds, `flex`, `gperf` |
 | `Toolchains/XcodeDefault.xctoolchain/usr/lib` | `libtapi.dylib`, clang's resource directory |
 | `usr/libexec` | `PlistBuddy` |
-| `usr/local/bin` | `bmake`, `bsdmake` |
+| `usr/local/bin` | `bmake`, `bsdmake`, `forth`, `bsdiff` |
+| `opt/bin` | the reverse-engineering extras Xcode does not ship: `ipsw`, `ldid`, `zsign`, `macho`, `machsec`, `ktool`, `patchelf`, `unxip`, `snaputil` |
 | `Makefiles/` | `CoreOS` and `pb_makefiles` build fragments |
 | `Platforms/`, `Toolchains/` | emitted `.sdk` (public and internal) and `.xctoolchain` bundle metadata |
 | `usr/lib/libxcselect.dylib` | our libxcselect — where the active developer directory is decided |

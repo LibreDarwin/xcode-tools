@@ -1738,11 +1738,14 @@ answers questions about the wrong artifact.
 This matters more than it looks like, because the tree builds more than the
 Xcode tools themselves: `ipsw` and the Go that builds it, `git`, `perl`,
 `python3`, `pip3`, `bmake`, `xmllint`, `xsltproc`.  Check `mk/ports.mk` and
-`build/release/usr/{bin,local/bin}` before reaching for a tool, and before
-proposing to add one that may already be there.
+`build/release/{usr/bin,usr/local/bin,opt/bin}` before reaching for a tool,
+and before proposing to add one that may already be there.  The
+reverse-engineering extras -- ipsw, ldid, zsign, macho, machsec, ktool,
+patchelf, unxip, snaputil -- are in `opt/bin`; bldd and llvm-cbe stay in the
+toolchain because a build uses them.
 
 ```sh
-IPSW=$PWD/build/release/usr/local/bin/ipsw
+IPSW=$PWD/build/release/opt/bin/ipsw
 "$IPSW" dyld info --dylibs "$DSC"
 ```
 

@@ -965,6 +965,18 @@ undershoots there, so running it would lift every negative sample the
 chain produced -- which is what the default gamma of 1.000000 does if the
 option is read as present rather than as a value.
 
+An output whose extension is not one this tool writes falls back to KTX,
+which is what Apple do: `.png`, `.jpg`, `.tga`, `.xyz` and no extension at
+all all come out as version 1 containers in both tools.  `.exr` is the
+exception, being a format Apple know and mostly refuse.  It takes one of
+the four half formats -- anything else, block or byte or single precision,
+is refused by name -- and a single level, EXR having nowhere to put a
+chain.  Both complaints go to stderr without a trailing newline, so they
+run into whatever stdout prints next; both leave no file and still exit
+zero; and the first says "EXR File format" where the second says "EXR file
+format".  Decompressing to one is refused from the other end, with the
+complaint about the type on stdout and the generic failure on stderr.
+
 `--gamma_in` and `--gamma_out` take a number or the word sRGB, and the
 word is matched literally: `srgb` and `SRGB` are not it, so they go to
 stof, which throws, and the caller sees `Error: stof: no conversion!` on
@@ -1263,6 +1275,14 @@ names once the levels are one slice deep, because the name follows the
 texture and not the level.  Two slices at least, and DDS gets none.
 
 Still to write, in the order they are worth doing:
+
+EXR output, which is the one thing here that needs a library this tree
+does not carry.  Apple write a single level of RGBA16, R16, RG16 or RGB16
+as PIZ compressed OpenEXR -- a wavelet and a Huffman coder -- so matching
+it byte for byte means OpenEXR itself rather than a second implementation
+of it.  Everything around it is in place: the two refusals are exact, and
+the case they leave says so and stops rather than writing a KTX with an
+.exr on the end, which is what happened before.
 
 The EXR and HDR inputs Apple's usage also lists, and BC7 mode 0.
 

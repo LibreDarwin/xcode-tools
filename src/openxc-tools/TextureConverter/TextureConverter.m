@@ -3046,7 +3046,13 @@ do_decompress(NSString *path, NSDictionary<NSString *, NSString *> *opts)
 	ktx_free(&k);
 
 	{
-		NSString *options = tc_options_string(opts, nil, nil);
+		/*
+		 * Decompression records no options at all: Apple write
+		 * TC_Version and KTXwriter and stop, whatever was asked
+		 * for.  It is compressing nothing, so there is nothing
+		 * for the annotation to say.
+		 */
+		NSString *options = @"";
 		bool annotate = opts[@"disable_annotation"] == nil;
 		NSData *file;
 

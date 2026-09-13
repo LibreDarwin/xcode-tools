@@ -1510,7 +1510,7 @@ Building today:
 | `gperf` | 3.0.3 | yes |
 | `flex` | 2.6.4 | yes |
 | `gnumake` (as `make` + `gnumake`) | 3.81 | yes |
-| `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil` | 21.1.6 | our own build |
+| `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd` | 21.1.6 | our own build |
 
 `llvm` is the port everything else waits on, and by far the longest —
 most of an hour on ten cores, which is the main reason `MK_PORTS` is off by

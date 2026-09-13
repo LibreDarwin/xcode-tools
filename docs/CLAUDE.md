@@ -1511,6 +1511,33 @@ Building today:
 | `flex` | 2.6.4 | yes |
 | `gnumake` (as `make` + `gnumake`) | 3.81 | yes |
 | `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd` | 21.1.6 | our own build |
+| `dyld` (late) — `dyld_info`, `dyld_analyzer` | dyld-1378 | `dyld_analyzer` yes; `dyld_info` all but `udot`/`sdot` in `-disassemble` |
+
+`dyld` is built with xcodebuild from dyld's own project, as part of the ld
+project (`RC_ProjectName=ld`, `RC_ProjectSourceVersion=1267`), which is how
+Apple build the two into the toolchain — see `mk/scripts/build-dyld-tools.sh`.
+It needs the internal SDK, which is assembled after the ports, so it is a
+`PORTS_LATE` entry and `bmake all` runs it in a `ports-late` step after `sdk`.
+Getting it to compile took the SDK, not the source: cctools' Mach-O headers
+in place of xnu's older ones, `ranlib.h` and `compact_unwind_encoding.h`, and
+libplatform's and Libc's private headers in the internal SDK's
+`usr/local/include`. Two things did need the source, patched in a copy
+(`mk/patches/dyld`): the release strips the body of
+`LinkerOptimizationHints::valid()`, and the disassembler callback is written
+against Apple's libLTO, whose `LLVMOpInfoCallback` has no `InstSize`.
+
+`dyld_info` disassembles through libLTO, so the llvm port writes libLTO's
+export list with the C disassembler API added (`LLVMCreateDisasm` and five
+more), which Apple's exports and llvm-project's `lto.exports` does not.
+libLTO's exports now match Apple's except for the 41 functions of the
+coverage C API, which no source release carries.
+
+Compared with Apple's, `dyld_info` agrees on 125 of 126 option-and-binary
+cases. The one difference is `-disassemble` on a binary with dot-product
+instructions: llvm-project's AArch64 tables give `udot`/`sdot` no Apple-syntax
+spelling, so they print as a bare mnemonic where Apple's LLVM prints
+`udot.4s v19, v1, v6` — 876 lines of 17.36 million for our clang. The fix
+belongs in `AArch64InstrFormats.td`, in a source this tree builds unmodified.
 
 `llvm` is the port everything else waits on, and by far the longest —
 most of an hour on ten cores, which is the main reason `MK_PORTS` is off by

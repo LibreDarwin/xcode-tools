@@ -70,7 +70,7 @@ done.
 | Where | What |
 |---|---|
 | `usr/bin` | our 19 reimplementations, plus headerdoc, pngcrush, `xml2man`, `resolveLinks`, `make`/`gnumake`, `bsdmake`, `bmake` |
-| `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools with `c++filt` and `readtapi`, `clang-format`, `clangd`, `dsymutil`, `swiftc`, `swift-demangle`, `swift-stdlib-tool`, developer_cmds, `flex`/`lex`, `gperf`, the `*-swift-linux-musl-clang.cfg` files, and `bldd`/`llvm-cbe` |
+| `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools with `c++filt` and `readtapi`, `clang-format`, `clangd`, `dsymutil`, `swiftc`, `swift-demangle`, `swift-stdlib-tool`, `dyld_info`, `dyld_analyzer`, developer_cmds, `flex`/`lex`, `gperf`, the `*-swift-linux-musl-clang.cfg` files, and `bldd`/`llvm-cbe` |
 | `Toolchains/XcodeDefault.xctoolchain/usr/lib` | `libtapi.dylib`, clang's resource directory |
 | `usr/libexec` | `PlistBuddy` |
 | `usr/local/bin` | `bmake`, `bsdmake`, `forth`, `bsdiff` |
@@ -210,7 +210,9 @@ it needs flags — sources are discovered automatically.
 **Submodules are never written to.** Every Makefile lives outside them and
 reaches in read-only; ports that cannot build out of tree get a private copy.
 `bmake check` exists because per-tool failures are ignored on purpose, so a
-broken tool would otherwise vanish from the release tree unnoticed.
+broken tool would otherwise vanish from the release tree unnoticed. It also
+fails on the opposite: a program left in the release tree that nothing in
+`mk/` installs any more (`bmake check-stale` runs just that part).
 
 Two clean builds of the default set produce byte-identical binaries.
 

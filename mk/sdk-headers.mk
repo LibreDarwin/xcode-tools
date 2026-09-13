@@ -384,9 +384,14 @@ sdk-headers:
 	# Apple's SDK carries: fat.h, nlist.h, stab.h and the reloc.h set
 	# are byte-identical to Xcode's, and loader.h differs only by the
 	# __OPEN_SOURCE__ guards the SDK install strips.
-.for h in fat.h loader.h nlist.h reloc.h stab.h arm/reloc.h arm64/reloc.h x86_64/reloc.h
+.for h in fat.h loader.h nlist.h ranlib.h reloc.h stab.h arm/reloc.h arm64/reloc.h x86_64/reloc.h
 	@cp -f ${CCTOOLS}/include/mach-o/${h} ${SDK_INC}/mach-o/${h} 2>/dev/null || true
 .endfor
+	# compact_unwind_encoding.h is libunwind's.  Xcode's copy also has
+	# the armv7k encodings, inside an __OPEN_SOURCE__ block that no
+	# source release carries; everything else matches.
+	@cp -f ${TOP}/src/swiftlang-llvm/llvm-project/libunwind/include/mach-o/compact_unwind_encoding.h \
+	    ${SDK_INC}/mach-o/ 2>/dev/null || true
 
 	# The dynamic loader's headers.  dlfcn.h is the one everything
 	# wants -- dlopen and dlsym live nowhere else, and it is what
@@ -1302,6 +1307,16 @@ sdk-internal: sdk-headers sdk-modulemap sdk-stubs sdk-swift sdk-overlay sdk-fram
 	# libplatform's private headers: _simple.h, os/lock_private.h and
 	# the rest, which dyld and libmalloc include by those names.
 	@cp -Rf ${LIBPLATFORM}/private/. ${INTERNAL_SDK}/usr/local/include/ 2>/dev/null || true
+	# Libc's own, the LOCALHDRS and OS_LOCALHDRS of its
+	# xcodescripts/headers.sh: libc_private.h and its neighbours.
+.for h in darwin/libc_private.h darwin/libc_hooks.h gen/utmpx_thread.h \
+    nls/FreeBSD/msgcat.h gen/thread_stack_pcs.h libdarwin/h/dirstat.h \
+    darwin/subsystem.h darwin/_libc_init.h
+	@cp -f ${LIBC}/${h} ${INTERNAL_SDK}/usr/local/include/ 2>/dev/null || true
+.endfor
+	@mkdir -p ${INTERNAL_SDK}/usr/local/include/os
+	@cp -f ${LIBC}/os/assumes.h ${LIBC}/os/debug_private.h \
+	    ${INTERNAL_SDK}/usr/local/include/os/ 2>/dev/null || true
 	# usr/include/System, which is how Apple's own projects reach the
 	# System.framework private headers -- libarchive says
 	# #include <System/sys/fsctl.h>.  The fakeroot's PrivateHeaders is

@@ -965,6 +965,43 @@ undershoots there, so running it would lift every negative sample the
 chain produced -- which is what the default gamma of 1.000000 does if the
 option is read as present rather than as a value.
 
+`--gamut_in` and `--gamut_out` take sRGB or DisplayP3, matched without
+regard to case and written back the way the usage spells them.  Anything
+else is refused with the usage on stdout and the complaint on stderr --
+and the complaint for the output one has its value run through a float
+format that never saw a number, so every bad `--gamut_out` is reported as
+`"1.000000"` where a bad `--gamut_in` is reported as itself.  Theirs,
+kept.
+
+Naming one of them is an annotation.  Version 1 gains
+`com.apple.image.colorGamut` and `com.apple.image.colorTransfer`, after
+`TC_Options` and before `com.apple.image.premultipliedAlpha`, and
+`--disable_annotation` leaves them alone: they describe the file rather
+than annotate it.  The transfer says `sRGB` when the pixel format is an
+sRGB one and `linear` otherwise, and `--gamma_out` does not move it.
+`--gamut_out` wins and falls back to `--gamut_in`.  A normal map gets
+neither, its channels being a direction.  Version 2 records only
+DisplayP3, as `colorPrimaries` 10 in the data format descriptor; DDS
+records nothing.
+
+Naming two that differ is a conversion: a three by three matrix on the
+stored values, not on linear light.  The nine numbers were read back by
+handing their tool an image of pure red, green and blue, a basis vector in
+giving a column out.  They are not the textbook matrix, whose
+blue-to-red and blue-to-green terms are zero where theirs are a part in
+sixty thousand, so theirs is derived from primaries at runtime and that is
+the derivation's residue -- white comes back 0.99999994 in red rather than
+one, which is the three products summed in float in that order.  It runs
+after `--gamma_in` and after the chain: the matrix is linear and so is the
+filter, so converting before the chain and converting after it agree to
+within a unit in the last place, and Apple's answer is the second.
+
+Decompression reads the pair backwards from everything else.  It
+annotates from `--gamut_in` and ignores `--gamut_out`, which is the
+sensible reading there -- a decompressor is reporting what the data is,
+not asking for it to be moved -- and it converts nothing.  It validates
+both.
+
 `--rgbm_range` is the range the encoding packs into, six unless it is
 given and never less than one -- Apple parse it with stof, so a fraction
 is allowed, a word is an error of its own, and anything below one is
@@ -1198,8 +1235,7 @@ texture and not the level.  Two slices at least, and DDS gets none.
 
 Still to write, in the order they are worth doing:
 
-`--gamut_in`/`--gamut_out` beyond the `.h` output; the EXR and HDR inputs
-Apple's usage also lists; and BC7 mode 0.
+The EXR and HDR inputs Apple's usage also lists, and BC7 mode 0.
 
 `--max_extent` announces itself: `Resized image to (width: %d, height:
 %d, depth: %d)`, once for every image it resized -- a face each for a

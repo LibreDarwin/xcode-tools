@@ -1512,6 +1512,12 @@ Building today:
 | `gnumake` (as `make` + `gnumake`) | 3.81 | yes |
 | `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd` | 21.1.6 | our own build |
 | `dyld` (late) — `dyld_info`, `dyld_analyzer` | dyld-1378 | `dyld_analyzer` yes; `dyld_info` all but `udot`/`sdot` in `-disassemble` |
+| `llbuild` — `swift-build-tool` | swift-6.3 snapshot, `llbuild-24700.0.19` | yes |
+
+`c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
+source for either, so both are written from what Apple's pass to the clang
+beside them, and match on 194 argument lists — `c89`'s FreeBSD-descended
+quirks included, down to spinning forever on a second `--`.
 
 `dyld` is built with xcodebuild from dyld's own project, as part of the ld
 project (`RC_ProjectName=ld`, `RC_ProjectSourceVersion=1267`), which is how
@@ -1662,6 +1668,32 @@ twice.
   vendored gem, one of them binds GTK3, and a build that fetches from
   rubygems.org is not a build that runs twice and gets the same answer. This
   needs a Ruby story for the whole tree before it needs a port fragment.
+
+### Toolchain tools not built, and why
+
+Xcode's `XcodeDefault.xctoolchain/usr/bin` has tools this tree does not
+build. Each is here with what stands in the way.
+
+- **`tapi`, `tapi-analyze`** — `distribution-Developer_Tools/tapi` is
+  tapi-1600.0.11.8; Xcode's is tapi-2100. The llvm port builds `libtapi` from
+  it, which is all ld64 needs, but the `tapi` command fails in about 250
+  places against LLVM 21: the option tables LLVM's TableGen now writes pass
+  more fields than tapi's `OPTION` macro takes, `clang::DiagnosticOptions` is
+  no longer reference-counted, and clang AST accessors it calls are gone.
+  `tapi-analyze` is not in the published source at all.
+- **`m4`/`bm4`, `yacc`/`byacc`** — Apple's projects are bm4-8 and byacc-4,
+  and neither is in the Developer Tools release.
+- **`gm4`, `bison`** — carried, and blocked by their bundled gnulib; see
+  `mk/ports.mk`.
+- **`swift-plugin-server`** — not a target this Swift configuration
+  generates. `swift-driver`, and `swift-package`, `sourcekit-lsp`,
+  `swift-format`, `docc` and `swift-help` beyond it, need SwiftPM packages or
+  repositories this tree does not have yet.
+- **`clang-stat-cache`** — Apple's own; not in llvm-project.
+- **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
+  `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,
+  `referenceobjectc`/`referenceobjectcompiler`, `exutil`,
+  `cache-build-session`, `modules-verifier`, `snippet-extract`, `iig`.
 
 Two outside projects were looked at and are not being taken up:
 

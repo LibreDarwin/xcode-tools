@@ -796,10 +796,13 @@ sdk-stubs:
 .endfor
 	@[ -f ${SDK_LIB}/libobjc.A.tbd ] && \
 	    ln -sfn libobjc.A.tbd ${SDK_LIB}/libobjc.tbd || true
-	# ncurses carries a second alias Apple ship and the loop above does
-	# not make: the major-only name beside the unversioned one.
+	# ncurses carries two more aliases Apple ship and the loop above does
+	# not make: the major-only name beside the unversioned one, and
+	# libcurses, which is what -lcurses asks for.
+.for a in libncurses.5 libcurses
 	@[ -f ${SDK_LIB}/libncurses.5.4.tbd ] && \
-	    ln -sfn libncurses.5.4.tbd ${SDK_LIB}/libncurses.5.tbd || true
+	    ln -sfn libncurses.5.4.tbd ${SDK_LIB}/${a}.tbd || true
+.endfor
 
 # Builds xnu far enough to generate the headers the two blocks above
 # take.  Kept out of sdk-headers because it wants the network, a Kernel

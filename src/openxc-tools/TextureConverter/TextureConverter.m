@@ -37,6 +37,7 @@
 #include "formats.h"
 #include "compress.h"
 #include "decode.h"
+#include "exr.h"
 #include "ktx.h"
 #include "ktx2.h"
 #include "header.h"
@@ -231,8 +232,8 @@ static void alpha_to_coverage(float **levels, const int *widths,
 static bool wants_header(NSString *output);
 static bool wants_exr(NSString *output);
 static float from_half(uint16_t h);
-static int exr_refusal(NSString *output, const char *name, bool srgb,
-    int nlevels);
+static int exr_output(NSString *output, const char *name, bool srgb,
+    int nlevels, const void *level, int w, int h);
 static bool wants_dds(NSString *output);
 static NSData *write_dds_generic(void **levels, const size_t *sizes,
     const int *widths, const int *heights, const int *depths, int nlevels,
@@ -1864,7 +1865,8 @@ do_convert(NSArray<NSString *> *paths,
 		}
 
 		{
-			int st = exr_refusal(output, oname, srgb, n);
+			int st = exr_output(output, oname, srgb, n, ptrs[0],
+			    widths[0], heights[0]);
 
 			if (st >= 0) {
 				for (i = 0; i < n * faces; i++)
@@ -1946,7 +1948,7 @@ wants_exr(NSString *output)
 }
 
 /*
- * OpenEXR, which this tool cannot write and Apple mostly will not.
+ * OpenEXR, which Apple mostly refuse.
  *
  * The format has to be one of the four half ones -- anything else, block
  * or byte or single precision, is refused by name -- and the file has to
@@ -1955,17 +1957,14 @@ wants_exr(NSString *output)
  * stdout prints next, and both leave no file behind and still exit zero.
  * Note the capital in the first and the lower case in the second: theirs.
  *
- * What is left, a single level of RGBA16, R16, RG16 or RGB16, is a file
- * Apple write and this tool does not: theirs is PIZ compressed, which is
- * a wavelet and a Huffman coder, and matching it byte for byte means
- * OpenEXR itself rather than a second implementation of it.  Saying so
- * and stopping is better than writing a KTX with an .exr on the end,
- * which is what happened before.
+ * What gets past both is written through OpenEXR, as theirs is; see
+ * exr.cpp.
  *
- * Returns the status to exit with, or -1 to carry on.
+ * Returns the status to exit with, or -1 when the output is not an EXR.
  */
 static int
-exr_refusal(NSString *output, const char *name, bool srgb, int nlevels)
+exr_output(NSString *output, const char *name, bool srgb, int nlevels,
+    const void *level, int w, int h)
 {
 	char buf[64];
 
@@ -1989,9 +1988,26 @@ exr_refusal(NSString *output, const char *name, bool srgb, int nlevels)
 		    "multiple miplevels");
 		return (0);
 	}
-	fprintf(stderr, "Error: Writing EXR is not implemented in this "
-	    "build!\n");
-	return (255);
+	/*
+	 * RGBA16 is OpenEXR's writer and byte for byte theirs.  The other
+	 * three are not refused by Apple, but their writer reads every
+	 * format four halves to a texel and so runs off the end of an R16,
+	 * RG16 or RGB16 level into whatever the heap holds -- two runs on
+	 * one image write two different files.  There is nothing stable to
+	 * reproduce, so this says so rather than invent a fourth answer.
+	 */
+	if (strcmp(name, "RGBA16") != 0) {
+		fprintf(stderr, "Error: EXR output of %s is not reproducible: "
+		    "Apple's writer reads past the end of the level\n", name);
+		return (255);
+	}
+	if (exr_write_rgba16([output fileSystemRepresentation], level, w,
+	    h) != 0) {
+		fprintf(stderr, "Error: Failed to write %s\n",
+		    [output UTF8String]);
+		return (255);
+	}
+	return (0);
 }
 
 /*
@@ -2834,8 +2850,8 @@ do_compress(NSArray<NSString *> *paths,
 		bool annotate = opts[@"disable_annotation"] == nil;
 
 		{
-			int st = exr_refusal(output, [fmt UTF8String], srgb,
-			    n);
+			int st = exr_output(output, [fmt UTF8String], srgb,
+			    n, blocks[0], widths[0], heights[0]);
 
 			if (st >= 0)
 				return (st);

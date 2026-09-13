@@ -130,6 +130,25 @@ P_MAKE_ARGS=	clang llvm-nm llvm-otool llvm-objdump llvm-size \
 CLANG_RESOURCE_VER!=	ls ${P_WORKDIR}/build/lib/clang 2>/dev/null | head -1
 P_TREES=	lib/clang/${CLANG_RESOURCE_VER}
 
+# libLTO's exports.  Apple's libLTO also exports the C disassembler API
+# -- LLVMCreateDisasm and its five neighbours -- which dyld_info calls to
+# disassemble; llvm-project's lto.exports stops at lto_* and thinlto_*, so
+# the objects are in the library but stripped.  CMake writes
+# tools/lto/LTO.exports from that list at build time, only when it is
+# missing or older than the list, so writing it here after configure --
+# the same sed CMake runs, plus the six -- is what the link uses.  The
+# library is removed so that it relinks against it.
+# ponytail: a change to llvm-project's lto.exports makes ninja rewrite the
+# file without the six; reconfiguring (touch this file) puts them back.
+LTO_DISASM_EXPORTS=	LLVMCreateDisasm LLVMCreateDisasmCPU \
+			LLVMCreateDisasmCPUFeatures LLVMDisasmDispose \
+			LLVMDisasmInstruction LLVMSetDisasmOptions
+P_POST_CONFIGURE=	mkdir -p tools/lto && \
+			{ sed -e 's/^/_/' < ${P_SRCDIR}/llvm/tools/lto/lto.exports; \
+			  for s in ${LTO_DISASM_EXPORTS}; do echo _$$s; done; } \
+			    > tools/lto/LTO.exports && \
+			rm -f lib/libLTO.dylib
+
 # The libraries, staged into the toolchain's usr/lib rather than usr/bin.
 #
 # ld64 links libtapi.  The other two are what Apple's toolchain carries

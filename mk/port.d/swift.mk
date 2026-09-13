@@ -48,7 +48,7 @@ P_CONFIGURE_ARGS=	\
 # reports when no separate driver is built -- so the frontend is the
 # compiler here, not just a component of it.
 P_MAKE_ARGS=	swift-frontend swift-stdlib-macosx-arm64 \
-		libswiftDemangle.dylib
+		libswiftDemangle.dylib swift-demangle swift-stdlib-tool
 
 P_NOSTAGE=	yes
 
@@ -65,10 +65,20 @@ P_LIBS=		lib/libswiftDemangle.dylib
 # toolchain should depend on: libc++ is ABI-stable on macOS and the
 # system always has one, whereas this toolchain ships none and Apple's
 # does not either.  Point it at the same one Apple points at.
-P_POST_BUILD=	install_name_tool -change @rpath/libc++.1.dylib \
-		    /usr/lib/libc++.1.dylib lib/libswiftDemangle.dylib
+P_POST_BUILD=	for f in lib/libswiftDemangle.dylib bin/swift-demangle \
+		    bin/swift-stdlib-tool; do \
+			install_name_tool -change @rpath/libc++.1.dylib \
+			    /usr/lib/libc++.1.dylib $$f || exit 1; \
+		done
 
-P_PROGS=	bin/swift-frontend
+# swift-demangle is the command-line demangler and swift-stdlib-tool the
+# one Xcode's build runs to copy the Swift runtime into an app bundle.
+# Both link libc++ the way libswiftDemangle does, so the post-build
+# below repoints them too.  swift-plugin-server is not a target this
+# configuration generates, though Apple's toolchain carries it.
+P_PROGS=	bin/swift-frontend \
+		bin/swift-demangle \
+		bin/swift-stdlib-tool
 
 # The standard library: the modules and dylibs swiftc needs to compile
 # anything at all.  swift and swiftc are symlinks onto swift-frontend,

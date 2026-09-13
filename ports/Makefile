@@ -52,6 +52,14 @@ check-ports:
 .endfor
 	@${ECHO} "check: every port produced its binaries"
 
+print-installs:
+.for d p b in ${PORTS}
+.if empty(DISABLED_PROGS:M${p})
+	@${MAKE} -f ${TOP}/mk/port.mk TOP=${TOP} \
+		P_DIR=${d} P_NAME=${p} P_BIN=${b} print-installs
+.endif
+.endfor
+
 list-ports:
 .for d p b in ${PORTS}
 	@${ECHO} "${b}/${p}	<- src/${d}"
@@ -59,4 +67,4 @@ list-ports:
 
 .endif
 
-.PHONY: all clean check-ports list-ports
+.PHONY: all clean check-ports list-ports print-installs

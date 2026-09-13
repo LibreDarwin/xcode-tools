@@ -451,6 +451,28 @@ bundle-shims: bundle-dirs
 	@cp ${SCRIPTS}/xcrun-tool.sh ${RELEASE}/usr/bin/xcrun-tool
 	@chmod 755 ${RELEASE}/usr/bin/xcrun-tool
 
+# Every name bundle-aliases and bundle-shims can install, whether or not
+# the program each points at has been built, for the stale check.
+print-installs:
+.for t in Rez DeRez ResMerger SetFile GetFileInfo SplitForks
+	@echo Tools/${t}
+.endfor
+	@echo usr/bin/extractLocStrings
+	@echo usr/bin/xcrun-tool
+.for a t in nm llvm-nm otool llvm-otool ld.lld lld \
+	    swift swift-frontend swiftc swift-frontend \
+	    llvm-readelf llvm-readobj llvm-strip llvm-objcopy \
+	    llvm-ranlib llvm-ar \
+	    c++filt llvm-cxxfilt dwarfdump llvm-dwarfdump gcov llvm-cov \
+	    readtapi llvm-readtapi clang-cache clang
+	@echo ${XCTOOLCHAIN}/usr/bin/${a}
+.endfor
+.for s in cc c++ clang++ cpp lex flex++ unifdefall \
+	    aarch64-swift-linux-musl-clang.cfg aarch64-swift-linux-musl-clang++.cfg \
+	    x86_64-swift-linux-musl-clang.cfg x86_64-swift-linux-musl-clang++.cfg
+	@echo ${XCTOOLCHAIN}/usr/bin/${s}
+.endfor
+
 .PHONY: bundles bundle-dirs bundle-toolchain bundle-platform bundle-sdk \
 	bundle-sdk-content \
-	bundle-shims bundle-config bundle-aliases bundle-makefiles
+	bundle-shims bundle-config bundle-aliases bundle-makefiles print-installs

@@ -54,6 +54,18 @@ T_CFLAGS+=	-MD -MP
 # T_NOBUILD/etc. influence which branch below runs.
 sinclude ${TOP}/mk/tool.d/${T_PROG}.mk
 
+# What this tool installs, relative to build/release, for the stale
+# check in the top-level Makefile.  A fragment that installs a file of
+# its own beside the program names it in T_INSTALLS.
+print-installs:
+	@echo ${T_BIN}/${T_PROG}
+.for l in ${T_LINKS}
+	@echo ${T_BIN}/${l}
+.endfor
+.for f in ${T_INSTALLS}
+	@echo ${f}
+.endfor
+
 # `all` is always the default target, even when a fragment defines its
 # own helper rules (e.g. codegen) that would otherwise come first.
 .MAIN: all

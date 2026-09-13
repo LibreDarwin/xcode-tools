@@ -169,6 +169,26 @@ P_PREFIX?=		/usr
 # relative to the source dir (LLVM keeps its under llvm/).
 P_CMAKE_SRC?=	.
 
+# What this port installs, relative to build/release, for the stale
+# check in the top-level Makefile.  Merged and linked directories are
+# listed by what they hold now, which is what was put there.
+print-installs:
+.for f in ${P_PROGS}
+	@echo ${P_BIN}/${f:T}
+.endfor
+.for l in ${P_LINKS}
+	@echo ${P_BIN}/${l}
+.endfor
+.for src dst in ${P_RELEASE_MERGE}
+	@ls -A ${P_PROGSRC}/${src} 2>/dev/null | sed 's|^|${dst}/|'
+.endfor
+.for tgt lnk in ${P_RELEASE_SYMLINK}
+	@echo ${lnk}
+.endfor
+.for from to in ${P_RELEASE_LINKDIR}
+	@ls -A ${TOP}/build/release/${from} 2>/dev/null | sed 's|^|${to}/|'
+.endfor
+
 .if defined(P_NOBUILD)
 all clean:
 	@${ECHO} "skip: ${P_NAME} (P_NOBUILD)"

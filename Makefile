@@ -9,7 +9,9 @@
 #	ports		build components that carry their own build system
 #			(MK_PORTS=yes; off by default, they are slow)
 #	bundles		emit the .xctoolchain / .sdk bundle metadata
-#	check		verify every inventory entry produced a binary
+#	check		verify every inventory entry produced a binary, and
+#			that nothing no longer in the inventory is left
+#	check-stale	only the second half of check
 #	clean		remove build/, keeping the ports work directories
 #	clean-ports	remove the ports work directories
 #	distclean	remove build/ entirely
@@ -60,6 +62,33 @@ xnu-headers:
 check:
 	${MAKE} -C ${TOP}/src TOP=${TOP} check-progs
 	${MAKE} -C ${TOP}/ports TOP=${TOP} check-ports
+	${MAKE} -C ${TOP} TOP=${TOP} check-stale
+
+# The other half of check: programs in the release tree that nothing in
+# mk/ installs any more.  build/release is only ever added to, so taking
+# a tool out of the inventory leaves its last build behind, still on the
+# PATH of anyone using the tree.  The claimed names are collected with
+# every tier switched on, so building without ports does not make the
+# ports' programs look stale.
+# ponytail: program directories only; libraries and staged trees are
+# not swept.
+STALE_DIRS=	usr/bin usr/local/bin usr/libexec opt/bin Tools \
+		Toolchains/XcodeDefault.xctoolchain/usr/bin
+
+check-stale:
+	@t=$$(mktemp -d) && trap 'rm -rf "$$t"' EXIT && \
+	{ ${MAKE} -C ${TOP}/src TOP=${TOP} MK_PORTS=yes MK_TOOLCHAIN=yes print-installs && \
+	  ${MAKE} -C ${TOP}/ports TOP=${TOP} MK_PORTS=yes print-installs && \
+	  ${MAKE} -f ${TOP}/mk/bundle.mk TOP=${TOP} print-installs; } | sort -u > "$$t/claimed" && \
+	( cd ${TOP}/build/release && for d in ${STALE_DIRS}; do \
+	    [ -d "$$d" ] && find "$$d" -maxdepth 1 -mindepth 1 \( -type f -o -type l \); \
+	  done ) | sort > "$$t/installed" && \
+	comm -23 "$$t/installed" "$$t/claimed" > "$$t/stale" && \
+	if [ -s "$$t/stale" ]; then \
+		sed 's/^/STALE: /' "$$t/stale"; \
+		echo "check: installed by nothing in mk/ -- remove them from build/release"; \
+		exit 1; \
+	fi && echo "check: nothing stale in the release tree"
 
 list-progs:
 	${MAKE} -C ${TOP}/src TOP=${TOP} list-progs
@@ -80,6 +109,6 @@ clean-ports:
 distclean: clean clean-ports
 	rm -rf ${TOP}/build
 
-.PHONY: all dirs lib progs ports bundles check xnu-headers \
+.PHONY: all dirs lib progs ports bundles check check-stale xnu-headers \
 	list-progs list-ports \
 	clean clean-ports distclean

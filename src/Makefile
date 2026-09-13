@@ -39,6 +39,14 @@ check-progs:
 .endfor
 	@${ECHO} "check: every inventory entry produced a binary"
 
+print-installs:
+.for d p b in ${PROGS}
+.if empty(DISABLED_PROGS:M${p})
+	@${MAKE} -f ${TOP}/mk/tool.mk TOP=${TOP} \
+		T_DIR=${d} T_PROG=${p} T_BIN=${b} print-installs
+.endif
+.endfor
+
 list-progs:
 .for d p b in ${PROGS}
 .if empty(DISABLED_PROGS:M${p})
@@ -46,4 +54,4 @@ list-progs:
 .endif
 .endfor
 
-.PHONY: all clean check-progs list-progs
+.PHONY: all clean check-progs list-progs print-installs

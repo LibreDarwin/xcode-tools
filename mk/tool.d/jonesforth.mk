@@ -12,6 +12,7 @@ T_SRCS=		jonesforth.S
 
 JF_SHARE=	${TOP}/build/release/usr/local/share/jonesforth
 JF_REPL=	${TOP}/build/release/usr/local/bin/jonesforth-repl
+T_INSTALLS+=	usr/local/bin/jonesforth-repl
 
 all: jonesforth-runtime
 

@@ -361,3 +361,6 @@
 [submodule "src/extras/byacc"]
 	path = src/extras/byacc
 	url = https://github.com/ThomasDickey/byacc-snapshots.git
+[submodule "src/swiftlang-llvm/swift-package-manager"]
+	path = src/swiftlang-llvm/swift-package-manager
+	url = https://github.com/swiftlang/swift-package-manager

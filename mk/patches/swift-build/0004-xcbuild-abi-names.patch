@@ -1,0 +1,24 @@
+--- a/Sources/SwiftBuild/CMakeLists.txt
++++ b/Sources/SwiftBuild/CMakeLists.txt
+@@ -67,7 +67,8 @@
+ set_target_properties(SwiftBuild PROPERTIES
+   Swift_LANGUAGE_VERSION 5)
+ target_compile_options(SwiftBuild PRIVATE
+-  "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>")
++  "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>"
++  "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-module-abi-name XCBuild>")
+ target_link_libraries(SwiftBuild PUBLIC
+   SWBCSupport
+   SWBCore
+--- a/Sources/SWBProjectModel/CMakeLists.txt
++++ b/Sources/SWBProjectModel/CMakeLists.txt
+@@ -19,7 +19,8 @@
+ set_target_properties(SWBProjectModel PROPERTIES
+   Swift_LANGUAGE_VERSION 6)
+ target_compile_options(SWBProjectModel PRIVATE
+-  "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>")
++  "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>"
++  "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-module-abi-name XCBProjectModel>")
+ target_link_libraries(SWBProjectModel PUBLIC
+   SWBProtocol)
+ 

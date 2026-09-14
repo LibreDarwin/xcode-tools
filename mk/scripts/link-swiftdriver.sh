@@ -32,3 +32,24 @@ cd "$B"
 
 sh "$(dirname "$0")/set-rpaths.sh" libSwiftDriver.dylib \
     /usr/lib/swift @executable_path/../lib
+
+# SwiftDriverConfig.cmake files for the projects that link a target named
+# SwiftDriver, with the driver's Swift modules to import: in
+# swiftdriver-dylib the dylib weakly, as Xcode's SwiftBuild frameworks
+# link it, and in swiftdriver-dylib-strong plainly, as its swift-package
+# does.
+config() {
+	mkdir -p "$1"
+	cat > "$1/SwiftDriverConfig.cmake" <<EOF
+foreach(t SwiftDriver SwiftOptions)
+  if(NOT TARGET \${t})
+    add_library(\${t} INTERFACE IMPORTED)
+    set_target_properties(\${t} PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "$B/swift"
+      INTERFACE_LINK_OPTIONS "SHELL:$2")
+  endif()
+endforeach()
+EOF
+}
+config swiftdriver-dylib "-Xlinker -weak_library -Xlinker $B/libSwiftDriver.dylib"
+config swiftdriver-dylib-strong "$B/libSwiftDriver.dylib"

@@ -1,0 +1,22 @@
+--- a/Sources/SwiftBuild/CMakeLists.txt
++++ b/Sources/SwiftBuild/CMakeLists.txt
+@@ -66,6 +66,8 @@
+   TerminalAttributes.swift)
+ set_target_properties(SwiftBuild PROPERTIES
+   Swift_LANGUAGE_VERSION 5)
++target_compile_options(SwiftBuild PRIVATE
++  "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>")
+ target_link_libraries(SwiftBuild PUBLIC
+   SWBCSupport
+   SWBCore
+--- a/Sources/SWBProjectModel/CMakeLists.txt
++++ b/Sources/SWBProjectModel/CMakeLists.txt
+@@ -18,6 +18,8 @@
+   PIFGenerationModel.swift)
+ set_target_properties(SWBProjectModel PROPERTIES
+   Swift_LANGUAGE_VERSION 6)
++target_compile_options(SWBProjectModel PRIVATE
++  "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>")
+ target_link_libraries(SWBProjectModel PUBLIC
+   SWBProtocol)
+ 

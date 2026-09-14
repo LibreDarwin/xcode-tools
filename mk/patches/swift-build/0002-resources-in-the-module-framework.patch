@@ -1,0 +1,21 @@
+--- a/Sources/CMakeLists.txt
++++ b/Sources/CMakeLists.txt
+@@ -29,16 +29,9 @@
+     OUTPUT "${CMAKE_BINARY_DIR}/resource_accessors/SwiftBuild_${BundleXCSpecs_MODULE}_resource_bundle_accessor.swift"
+     CONTENT [[
+     import Foundation
++    private final class _SwiftBuildResourceBundleFinder {}
+     extension Foundation.Bundle {
+-      static nonisolated let module: Bundle = {
+-        let mainPath = Bundle.main.bundleURL.appendingPathComponent("SwiftBuild_@BundleXCSpecs_MODULE@.resources").path
+-        let buildPath = #"@_SWIFT_BUILD_RESOURCE_BUNDLE_BUILD_PATH@"#
+-        let preferredBundle = Bundle(path: mainPath)
+-        guard let bundle = preferredBundle ?? Bundle(path: buildPath) else {
+-          Swift.fatalError("could not load resource bundle: from \(mainPath) or \(buildPath)")
+-        }
+-        return bundle
+-      }()
++      static nonisolated let module: Bundle = Bundle(for: _SwiftBuildResourceBundleFinder.self)
+     }
+     ]]
+     ESCAPE_QUOTES @ONLY NEWLINE_STYLE LF)

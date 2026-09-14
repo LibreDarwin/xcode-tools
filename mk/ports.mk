@@ -186,6 +186,10 @@ PORTS+=	extras/libplist plistutil usr/local/bin
 # gm4 beside it.  See mk/port.d/gm4.mk.
 PORTS+=	apple/distribution-Developer_Tools/gm4 gm4 ${XCTOOLCHAIN}/usr/bin
 PORTS+=	apple/distribution-Developer_Tools/bison bison ${XCTOOLCHAIN}/usr/bin
+
+# byacc, which Apple ship beside bison and do not publish.  See
+# mk/port.d/byacc.mk.
+PORTS+=	extras/byacc byacc ${XCTOOLCHAIN}/usr/bin
 #
 # Apple also ships lex, yacc and m4 in the toolchain, but they are
 # distinct binaries rather than links to flex/bison/gm4, so they are not

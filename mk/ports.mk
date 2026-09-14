@@ -181,20 +181,11 @@ PORTS+=	extras/libplist plistutil usr/local/bin
 # See mk/tool.d/bsdmake.mk.
 # ------------------------------------------------------------------
 
-# gm4 and bison are NOT enabled.  Both restore their missing gnulib
-# templates fine (mk/port.d/), but then their bundled gnulib -- which
-# predates the modern SDK by two decades -- substitutes its own
-# <stdint.h>/<inttypes.h> and the system _inttypes.h no longer sees
-# intmax_t:
-#
-#   _inttypes.h:238:8: error: unknown type name 'intmax_t'
-#
-# Getting them building means either forcing configure to accept the
-# system headers or updating the vendored gnulib.  Their port.d
-# fragments are in place for whoever picks that up.
-#
-#PORTS+=	apple/distribution-Developer_Tools/gm4 gm4 ${XCTOOLCHAIN}/usr/bin
-#PORTS+=	apple/distribution-Developer_Tools/bison bison ${XCTOOLCHAIN}/usr/bin
+# gm4 and bison, built with Apple's Xcode projects rather than configure,
+# whose bundled gnulib no longer builds against the SDK.  bison runs the
+# gm4 beside it.  See mk/port.d/gm4.mk.
+PORTS+=	apple/distribution-Developer_Tools/gm4 gm4 ${XCTOOLCHAIN}/usr/bin
+PORTS+=	apple/distribution-Developer_Tools/bison bison ${XCTOOLCHAIN}/usr/bin
 #
 # Apple also ships lex, yacc and m4 in the toolchain, but they are
 # distinct binaries rather than links to flex/bison/gm4, so they are not

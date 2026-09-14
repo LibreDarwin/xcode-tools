@@ -355,3 +355,6 @@
 [submodule "src/extras/acpica"]
 	path = src/extras/acpica
 	url = https://github.com/open-acpica/acpica
+[submodule "src/extras/bas"]
+	path = src/extras/bas
+	url = https://github.com/xnuports/bas

@@ -17,14 +17,15 @@
 #	distclean	remove build/ entirely
 #	list-progs	print the tool inventory with release placements
 #
-# The release tree lands in build/release/ and is a drop-in replacement
-# for /Applications/Xcode.app/Contents/Developer/ -- see mk/progs.mk.
+# The release tree lands in build/release/, laid out as Xcode.app/Contents:
+# Developer/ is a drop-in replacement for
+# /Applications/Xcode.app/Contents/Developer/, SharedFrameworks/ sits beside
+# it as Xcode's does, and opt/ holds the extras, which are not Xcode's -- see mk/progs.mk.
 
 TOP?=		${.CURDIR}
 
 .include "${TOP}/mk/xcodetools.sys.mk"
 
-RELEASE=	${TOP}/build/release
 
 all: dirs lib ports progs bundles sdk ports-late
 	@${ECHO} "== xcode-tools build complete =="
@@ -76,7 +77,7 @@ check:
 # ports' programs look stale.
 # ponytail: program directories only; libraries and staged trees are
 # not swept.
-STALE_DIRS=	usr/bin usr/local/bin usr/libexec opt/bin Tools \
+STALE_DIRS=	usr/bin usr/local/bin usr/libexec Tools \
 		Toolchains/XcodeDefault.xctoolchain/usr/bin
 
 check-stale:
@@ -84,13 +85,15 @@ check-stale:
 	{ ${MAKE} -C ${TOP}/src TOP=${TOP} MK_PORTS=yes MK_TOOLCHAIN=yes print-installs && \
 	  ${MAKE} -C ${TOP}/ports TOP=${TOP} MK_PORTS=yes print-installs && \
 	  ${MAKE} -f ${TOP}/mk/bundle.mk TOP=${TOP} print-installs; } | sort -u > "$$t/claimed" && \
-	( cd ${TOP}/build/release && for d in ${STALE_DIRS}; do \
+	{ ( cd ${RELEASE} && for d in ${STALE_DIRS}; do \
 	    [ -d "$$d" ] && find "$$d" -maxdepth 1 -mindepth 1 \( -type f -o -type l \); \
-	  done ) | sort > "$$t/installed" && \
+	  done ); \
+	  ( cd ${RELEASE_ROOT} && [ -d opt/bin ] && \
+	    find opt/bin -maxdepth 1 -mindepth 1 \( -type f -o -type l \) ); } | sort > "$$t/installed" && \
 	comm -23 "$$t/installed" "$$t/claimed" > "$$t/stale" && \
 	if [ -s "$$t/stale" ]; then \
 		sed 's/^/STALE: /' "$$t/stale"; \
-		echo "check: installed by nothing in mk/ -- remove them from build/release"; \
+		echo "check: installed by nothing in mk/ -- remove them from the release tree"; \
 		exit 1; \
 	fi && echo "check: nothing stale in the release tree"
 

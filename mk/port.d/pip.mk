@@ -23,7 +23,7 @@ P_COPY=			no
 P_BUILDSYS=		make
 P_MAKE=			sh ${TOP}/mk/scripts/install-pip.sh
 P_MAKE_ARGS=		${TOP}/src/python/pip \
-			${TOP}/build/release/usr/bin/python3 \
+			${RELEASE}/usr/bin/python3 \
 			${PY_VERSION} \
 			${P_OBJDIR}
 P_NOSTAGE=		yes

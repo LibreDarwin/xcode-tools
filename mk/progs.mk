@@ -6,12 +6,13 @@
 #
 #   <dir>             directory containing the sources, under src/
 #   <program-name>    final binary name
-#   <install-suffix>  path under build/release/, mirroring where Xcode
-#                     keeps each tool:
+#   <install-suffix>  path under build/release/Developer/, mirroring where
+#                     Xcode keeps each tool (opt/bin, for the extras,
+#                     is under build/release/ instead):
 #                       usr/bin, usr/libexec,
 #                       ${XCTOOLCHAIN}/usr/bin
 #
-# build/release/ is a drop-in replacement for
+# build/release/Developer/ is a drop-in replacement for
 # /Applications/Xcode.app/Contents/Developer/.
 
 # ------------------------------------------------------------------

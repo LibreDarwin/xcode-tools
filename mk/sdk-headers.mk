@@ -23,7 +23,6 @@ TOP?=		${.CURDIR}
 
 .include "${TOP}/mk/xcodetools.sys.mk"
 
-RELEASE=	${TOP}/build/release
 SDK_ROOT=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 SDK_INC=	${SDK_ROOT}/usr/include
 INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk

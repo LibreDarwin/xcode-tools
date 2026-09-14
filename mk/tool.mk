@@ -32,7 +32,12 @@ T_SRCDIR?=	${TOP}/src/${T_DIR}
 # objdir would let one link the other's object.  Program names are unique
 # by construction: they are the installed binary names.
 T_OBJDIR?=	${TOP}/build/obj/${T_PROG}
-T_TARGET?=	${TOP}/build/release/${T_BIN}/${T_PROG}
+# opt/bin, where the extras go, is beside the Developer directory.
+.if !empty(T_BIN:Mopt/*)
+T_TARGET?=	${RELEASE_ROOT}/${T_BIN}/${T_PROG}
+.else
+T_TARGET?=	${RELEASE}/${T_BIN}/${T_PROG}
+.endif
 
 .include "${TOP}/mk/xcodetools.sys.mk"
 
@@ -54,7 +59,7 @@ T_CFLAGS+=	-MD -MP
 # T_NOBUILD/etc. influence which branch below runs.
 sinclude ${TOP}/mk/tool.d/${T_PROG}.mk
 
-# What this tool installs, relative to build/release, for the stale
+# What this tool installs, relative to build/release/Developer (opt/ to build/release), for the stale
 # check in the top-level Makefile.  A fragment that installs a file of
 # its own beside the program names it in T_INSTALLS.
 print-installs:

@@ -6,5 +6,5 @@
 # usr/local rather than looked for on the system; the submodule's Makefile
 # says -lcapstone and leaves finding it to the compiler's defaults, which
 # would pick up whatever Homebrew has.
-T_CFLAGS+=	-I${TOP}/build/release/usr/local/include
-T_LDADD+=	${TOP}/build/release/usr/local/lib/libcapstone.a
+T_CFLAGS+=	-I${RELEASE}/usr/local/include
+T_LDADD+=	${RELEASE}/usr/local/lib/libcapstone.a

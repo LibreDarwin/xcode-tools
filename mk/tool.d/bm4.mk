@@ -14,8 +14,8 @@ T_CFLAGS+=	-DEXTENDED -I${T_SRCDIR} -I${TOP}/lib/bm4/libopenbsd \
 		-I${T_OBJDIR} \
 		-include ${TOP}/lib/bm4/compat/reallocarray.h
 
-.if exists(${TOP}/build/release/${XCTOOLCHAIN}/usr/bin/byacc)
-YACC=		${TOP}/build/release/${XCTOOLCHAIN}/usr/bin/byacc
+.if exists(${RELEASE}/${XCTOOLCHAIN}/usr/bin/byacc)
+YACC=		${RELEASE}/${XCTOOLCHAIN}/usr/bin/byacc
 .endif
 
 ${T_OBJDIR}/parser.h: ${T_OBJDIR}/parser.tab.h

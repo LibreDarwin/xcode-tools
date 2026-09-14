@@ -6,5 +6,5 @@
 T_SRCS+=	xccov.c bkeyed.c
 T_SRCS+=	src/openxc-tools/common/xcresult.c
 T_CFLAGS+=	-I${TOP}/src/openxc-tools/common
-T_CFLAGS+=	-I${TOP}/build/release/usr/local/include
-T_LDADD+=	${TOP}/build/release/usr/local/lib/libzstd.a
+T_CFLAGS+=	-I${RELEASE}/usr/local/include
+T_LDADD+=	${RELEASE}/usr/local/lib/libzstd.a

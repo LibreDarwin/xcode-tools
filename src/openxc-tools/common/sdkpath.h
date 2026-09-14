@@ -4,7 +4,7 @@
  * Two layouts exist and both are supported:
  *
  *   Apple's, which is what a stock Xcode ships and what our own
- *   build/release tree emits:
+ *   build/release/Developer tree emits:
  *
  *       <dev>/Platforms/<P>.platform/Developer/SDKs/<name>.sdk
  *       <dev>/Toolchains/<name>.xctoolchain

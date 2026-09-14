@@ -26,8 +26,8 @@ fi
 
 TOP=$1
 WORK=$2
-SDK=${TOP}/build/release/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
-TCLIB=${TOP}/build/release/Toolchains/XcodeDefault.xctoolchain/usr/lib
+SDK=${TOP}/build/release/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+TCLIB=${TOP}/build/release/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
 LLVM=${TOP}/src/swiftlang-llvm/llvm-project/llvm
 LLVM_BUILD=${TOP}/build/ports/llvm/build
 

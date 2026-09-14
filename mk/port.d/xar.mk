@@ -17,7 +17,7 @@ LIBXML2_STAGE=	${TOP}/build/ports/libxml2/stage/usr
 
 # Against the internal SDK: archive.h includes
 # <CommonCrypto/CommonDigestSPI.h>, which is SPI and lives only there.
-INTERNAL_SDK=	${TOP}/build/release/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
 
 # xml2-config reports the install prefix, so it hands configure a bare
 # -I/usr/include/libxml2.  An absolute -I is not rewritten by

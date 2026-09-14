@@ -41,7 +41,7 @@ P_PREPARE=	for p in ${TOP}/mk/patches/llvm-cbe/*.patch; do \
 		done
 
 LLVM_BUILD=	${TOP}/build/ports/llvm/build
-XCTC=		${TOP}/build/release/${XCTOOLCHAIN}/usr/bin
+XCTC=		${RELEASE}/${XCTOOLCHAIN}/usr/bin
 
 P_CONFIGURE_ARGS= \
 	-DLLVM_DIR=${LLVM_BUILD}/lib/cmake/llvm \

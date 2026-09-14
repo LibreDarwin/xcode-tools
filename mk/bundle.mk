@@ -1,6 +1,6 @@
 # mk/bundle.mk
 #
-# Emits the bundle metadata that makes build/release/ a drop-in
+# Emits the bundle metadata that makes build/release/Developer/ a drop-in
 # replacement for Xcode's Developer directory:
 #
 #	Toolchains/XcodeDefault.xctoolchain/ToolchainInfo.plist
@@ -27,7 +27,6 @@ TOP?=		${.CURDIR}
 .include "${XT_PLATFORM_MK}"
 .endif
 
-RELEASE=	${TOP}/build/release
 CONFIGS=	${TOP}/configs
 SCRIPTS=	${TOP}/scripts
 

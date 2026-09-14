@@ -33,8 +33,13 @@ clean:
 check-progs:
 .for d p b in ${PROGS}
 .if empty(DISABLED_PROGS:M${p})
-	@test -e ${TOP}/build/release/${b}/${p} || \
+.if "${b:Mopt/*}" != ""
+	@test -e ${RELEASE_ROOT}/${b}/${p} || \
 		{ ${ECHO} "MISSING: ${b}/${p}  (from src/${d})"; exit 1; }
+.else
+	@test -e ${RELEASE}/${b}/${p} || \
+		{ ${ECHO} "MISSING: ${b}/${p}  (from src/${d})"; exit 1; }
+.endif
 .endif
 .endfor
 	@${ECHO} "check: every inventory entry produced a binary"

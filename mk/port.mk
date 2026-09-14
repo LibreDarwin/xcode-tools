@@ -35,18 +35,18 @@
 #			several ports each add a part and no one of them owns
 #			the directory.
 #	P_RELEASE_SYMLINK  pairs of <target> <linkname>, both relative to
-#			build/release: one relative symlink apiece.  For linking
+#			the Developer directory: one relative symlink apiece.  For linking
 #			a whole directory, where P_RELEASE_LINKDIR links the
 #			files inside one.
 #	P_RELEASE_LINKDIR  pairs of <from> <to>, both relative to
-#			build/release: every file in <from> is symlinked into
+#			the Developer directory: every file in <from> is symlinked into
 #			<to>, relatively.  For a library that installs its
 #			headers under a prefix of its own but wants them
 #			found under the name they are included by.
 #	P_RELEASE_TREES	directories to stage anywhere in the release
 #			tree, as alternating <src> <dest> words: <src>
 #			relative to the same place P_PROGS reads from,
-#			<dest> relative to build/release.  For a port that
+#			<dest> relative to the Developer directory.  For a port that
 #			installs runtime data outside the toolchain --
 #			bmake's mk fragments, for instance.
 #	P_BUILDSYS	"autoconf" (default), "cmake", or "make" for a
@@ -103,8 +103,13 @@ P_SRCDIR?=	${TOP}/src/${P_DIR}
 P_WORKDIR?=	${TOP}/build/ports/${P_NAME}
 
 P_STAGEDIR?=	${P_WORKDIR}/stage
-P_BINDIR?=	${TOP}/build/release/${P_BIN}
-P_LIBDIR?=	${TOP}/build/release/${XCTOOLCHAIN}/usr/lib
+# opt/bin, where the extras go, is beside the Developer directory.
+.if !empty(P_BIN:Mopt/*)
+P_BINDIR?=	${RELEASE_ROOT}/${P_BIN}
+.else
+P_BINDIR?=	${RELEASE}/${P_BIN}
+.endif
+P_LIBDIR?=	${RELEASE}/${XCTOOLCHAIN}/usr/lib
 
 .include "${TOP}/mk/xcodetools.sys.mk"
 
@@ -169,7 +174,7 @@ P_PREFIX?=		/usr
 # relative to the source dir (LLVM keeps its under llvm/).
 P_CMAKE_SRC?=	.
 
-# What this port installs, relative to build/release, for the stale
+# What this port installs, relative to build/release/Developer (opt/ to build/release), for the stale
 # check in the top-level Makefile.  Merged and linked directories are
 # listed by what they hold now, which is what was put there.
 print-installs:
@@ -186,7 +191,7 @@ print-installs:
 	@echo ${lnk}
 .endfor
 .for from to in ${P_RELEASE_LINKDIR}
-	@ls -A ${TOP}/build/release/${from} 2>/dev/null | sed 's|^|${to}/|'
+	@ls -A ${RELEASE}/${from} 2>/dev/null | sed 's|^|${to}/|'
 .endfor
 
 .if defined(P_NOBUILD)
@@ -218,34 +223,34 @@ all: ${P_WORKDIR}/.staged
 	@${ECHO} "staged: ${XCTOOLCHAIN}/usr/lib/${l:T}"
 .endfor
 .for t in ${P_TREES}
-	@mkdir -p ${TOP}/build/release/${XCTOOLCHAIN}/usr/${t:H}
-	@rm -rf ${TOP}/build/release/${XCTOOLCHAIN}/usr/${t}
-	@cp -R ${P_PROGSRC}/${t} ${TOP}/build/release/${XCTOOLCHAIN}/usr/${t}
+	@mkdir -p ${RELEASE}/${XCTOOLCHAIN}/usr/${t:H}
+	@rm -rf ${RELEASE}/${XCTOOLCHAIN}/usr/${t}
+	@cp -R ${P_PROGSRC}/${t} ${RELEASE}/${XCTOOLCHAIN}/usr/${t}
 	@${ECHO} "staged: ${XCTOOLCHAIN}/usr/${t}/"
 .endfor
 .for src dst in ${P_RELEASE_TREES}
-	@mkdir -p ${TOP}/build/release/${dst:H}
-	@rm -rf ${TOP}/build/release/${dst}
-	@cp -R ${P_PROGSRC}/${src} ${TOP}/build/release/${dst}
+	@mkdir -p ${RELEASE}/${dst:H}
+	@rm -rf ${RELEASE}/${dst}
+	@cp -R ${P_PROGSRC}/${src} ${RELEASE}/${dst}
 	@${ECHO} "staged: ${dst}/"
 .endfor
 .for src dst in ${P_RELEASE_MERGE}
-	@mkdir -p ${TOP}/build/release/${dst}
-	@cp -R ${P_PROGSRC}/${src}/. ${TOP}/build/release/${dst}/
+	@mkdir -p ${RELEASE}/${dst}
+	@cp -R ${P_PROGSRC}/${src}/. ${RELEASE}/${dst}/
 	@${ECHO} "staged: ${dst}/ (merged)"
 .endfor
 .for tgt lnk in ${P_RELEASE_SYMLINK}
-	@mkdir -p ${TOP}/build/release/${lnk:H}
-	@rm -rf ${TOP}/build/release/${lnk}
-	@cd ${TOP}/build/release/${lnk:H} && \
+	@mkdir -p ${RELEASE}/${lnk:H}
+	@rm -rf ${RELEASE}/${lnk}
+	@cd ${RELEASE}/${lnk:H} && \
 	    ln -s "$$(python3 -c 'import os,sys;print(os.path.relpath(sys.argv[1],sys.argv[2]))' \
-		${TOP}/build/release/${tgt} "$$PWD")" ${lnk:T}
+		${RELEASE}/${tgt} "$$PWD")" ${lnk:T}
 	@${ECHO} "linked: ${lnk} -> ${tgt}"
 .endfor
 .for from to in ${P_RELEASE_LINKDIR}
-	@mkdir -p ${TOP}/build/release/${to}
-	@cd ${TOP}/build/release/${to} && \
-	    for f in ${TOP}/build/release/${from}/*; do \
+	@mkdir -p ${RELEASE}/${to}
+	@cd ${RELEASE}/${to} && \
+	    for f in ${RELEASE}/${from}/*; do \
 		[ -e "$$f" ] || continue; \
 		b=$$(basename "$$f"); \
 		rm -f "$$b"; \
@@ -352,7 +357,7 @@ check:
 		{ ${ECHO} "MISSING: ${XCTOOLCHAIN}/usr/lib/${l:T}  (port ${P_NAME})"; exit 1; }
 .endfor
 .for t in ${P_TREES}
-	@test -d ${TOP}/build/release/${XCTOOLCHAIN}/usr/${t} || \
+	@test -d ${RELEASE}/${XCTOOLCHAIN}/usr/${t} || \
 		{ ${ECHO} "MISSING: ${XCTOOLCHAIN}/usr/${t}/  (port ${P_NAME})"; exit 1; }
 .endfor
 # A port that installs only directories -- a library with headers and
@@ -360,21 +365,21 @@ check:
 # nothing at all, because P_PROGS and P_LIBS are both empty for it and
 # there is nothing left to look at.
 .for src dst in ${P_RELEASE_TREES}
-	@test -d ${TOP}/build/release/${dst} || \
+	@test -d ${RELEASE}/${dst} || \
 		{ ${ECHO} "MISSING: ${dst}/  (port ${P_NAME}, see ${P_WORKDIR}/*.log)"; exit 1; }
 .endfor
 # For a merged directory the destination existing proves nothing -- another
 # port may have made it -- so this asks whether what this port staged is
 # actually there.
 .for tgt lnk in ${P_RELEASE_SYMLINK}
-	@test -e ${TOP}/build/release/${lnk} || \
+	@test -e ${RELEASE}/${lnk} || \
 		{ ${ECHO} "MISSING: ${lnk}  (port ${P_NAME})"; exit 1; }
 .endfor
 .for from to in ${P_RELEASE_LINKDIR}
-	@for f in ${TOP}/build/release/${from}/*; do \
+	@for f in ${RELEASE}/${from}/*; do \
 	    [ -e "$$f" ] || continue; \
 	    b=$$(basename "$$f"); \
-	    test -e ${TOP}/build/release/${to}/$$b || \
+	    test -e ${RELEASE}/${to}/$$b || \
 		{ ${ECHO} "MISSING: ${to}/$$b  (port ${P_NAME})"; exit 1; }; \
 	done
 .endfor
@@ -382,7 +387,7 @@ check:
 	@test -n "$$(ls -A ${P_PROGSRC}/${src} 2>/dev/null)" || \
 		{ ${ECHO} "MISSING: ${P_NAME} staged no ${src}/  (see ${P_WORKDIR}/*.log)"; exit 1; }
 	@for f in $$(ls -A ${P_PROGSRC}/${src}); do \
-	    test -e ${TOP}/build/release/${dst}/$$f || \
+	    test -e ${RELEASE}/${dst}/$$f || \
 		{ ${ECHO} "MISSING: ${dst}/$$f  (port ${P_NAME})"; exit 1; }; \
 	done
 .endfor

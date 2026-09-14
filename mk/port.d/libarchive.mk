@@ -33,7 +33,7 @@ P_PREPARE=	${TOP}/mk/scripts/prepare-apple-libarchive.sh .
 # Against the internal SDK: Apple's additions to this tree include
 # os/variant_private.h and quarantine.h, both SPI and neither in the
 # public SDK.
-INTERNAL_SDK=	${TOP}/build/release/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
 
 P_CONFIGURE_ARGS=	-DCMAKE_OSX_SYSROOT=${INTERNAL_SDK} \
 		-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \

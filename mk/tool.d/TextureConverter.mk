@@ -15,24 +15,24 @@ T_LDADD+=	-framework ImageIO
 # "Using Compressor: NVTT" for every one of BC1 through BC7, and its mip
 # chains are NVTT's polyphase Kaiser -- see mk/port.d/nvtt.mk -- so both
 # come out bit for bit theirs rather than a second implementation.
-T_CFLAGS+=	-I${TOP}/build/release/usr/local/include
+T_CFLAGS+=	-I${RELEASE}/usr/local/include
 T_CXXFLAGS+=	-std=c++17 -DNV_CPU_AARCH64=1 -DNV_CPU_ARM=1
-T_LDADD+=	${TOP}/build/release/usr/local/lib/libnvtt-bc.a
+T_LDADD+=	${RELEASE}/usr/local/lib/libnvtt-bc.a
 
 # ARM's astc-encoder, which is what Apple's ASTC back end is.
-T_LDADD+=	${TOP}/build/release/usr/local/lib/libastcenc.a
+T_LDADD+=	${RELEASE}/usr/local/lib/libastcenc.a
 
 # Google's etc2comp, which is Apple's back end for every ETC2 and EAC
 # format at every quality.
-T_LDADD+=	${TOP}/build/release/usr/local/lib/libEtcLib.a
+T_LDADD+=	${RELEASE}/usr/local/lib/libEtcLib.a
 
 # OpenEXR 3.3.2 and the Imath 3.1 it is built with, statically, which is
 # how Apple's links them -- see mk/port.d/openexr.mk.  C++17 above is for
 # these headers; nothing else here needs more than 11.
-T_CXXFLAGS+=	-I${TOP}/build/release/usr/local/include/OpenEXR \
-		-I${TOP}/build/release/usr/local/include/Imath
-T_LDADD+=	${TOP}/build/release/usr/local/lib/libOpenEXR-3_3.a \
-		${TOP}/build/release/usr/local/lib/libOpenEXRCore-3_3.a \
-		${TOP}/build/release/usr/local/lib/libIlmThread-3_3.a \
-		${TOP}/build/release/usr/local/lib/libIex-3_3.a \
-		${TOP}/build/release/usr/local/lib/libImath-3_1.a
+T_CXXFLAGS+=	-I${RELEASE}/usr/local/include/OpenEXR \
+		-I${RELEASE}/usr/local/include/Imath
+T_LDADD+=	${RELEASE}/usr/local/lib/libOpenEXR-3_3.a \
+		${RELEASE}/usr/local/lib/libOpenEXRCore-3_3.a \
+		${RELEASE}/usr/local/lib/libIlmThread-3_3.a \
+		${RELEASE}/usr/local/lib/libIex-3_3.a \
+		${RELEASE}/usr/local/lib/libImath-3_1.a

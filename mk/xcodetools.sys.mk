@@ -9,16 +9,25 @@
 #	build/lib		static libraries built from submodule sources
 #	build/obj/<dir>		per-tool object files
 #	build/gen/<tool>	build-time generated sources
-#	build/release/		final staged tree -- a drop-in Developer/
-#		usr/{bin,lib,libexec,share}
-#		Toolchains/XcodeDefault.xctoolchain/usr/bin
-#		Platforms/<P>.platform/Developer/SDKs/<S>.sdk
-#		Tools/
+#	build/release/		final staged tree, laid out as Xcode.app/Contents
+#		Developer/		a drop-in Developer directory
+#			usr/{bin,lib,libexec,share}
+#			Toolchains/XcodeDefault.xctoolchain/usr/bin
+#			Platforms/<P>.platform/Developer/SDKs/<S>.sdk
+#			Tools/
+#		SharedFrameworks/	the frameworks Xcode keeps beside it
+#		opt/bin			the extras, which are not Xcode's
 #
 # The release layout mirrors Apple's Xcode Developer directory
 # (see mk/progs.mk and docs/DOCUMENTATION.md section 1).
 
 TOP?=		${.CURDIR}
+
+# Where the release tree goes.  RELEASE is the Developer directory, the
+# one everything Xcode's own layout names installs under.
+RELEASE_ROOT=	${TOP}/build/release
+RELEASE=	${RELEASE_ROOT}/Developer
+SHARED_FRAMEWORKS=	${RELEASE_ROOT}/SharedFrameworks
 
 CC?=		cc
 CPPFLAGS+=	-I${TOP}/include -I${TOP}/build/include

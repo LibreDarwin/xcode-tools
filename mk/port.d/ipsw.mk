@@ -26,7 +26,7 @@
 P_BUILDSYS=	make
 P_NOSTAGE=	yes
 
-GO_ROOT=	${TOP}/build/release/usr/local/go
+GO_ROOT=	${RELEASE}/usr/local/go
 # The version is linked in, not compiled in: built without these the
 # binary answers "Version:" and nothing after it.  Taken from the
 # submodule, so what ipsw reports is the tag that was checked out.

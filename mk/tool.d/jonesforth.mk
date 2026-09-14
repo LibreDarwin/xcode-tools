@@ -10,8 +10,8 @@
 # it in ahead of stdin.
 T_SRCS=		jonesforth.S
 
-JF_SHARE=	${TOP}/build/release/usr/local/share/jonesforth
-JF_REPL=	${TOP}/build/release/usr/local/bin/jonesforth-repl
+JF_SHARE=	${RELEASE}/usr/local/share/jonesforth
+JF_REPL=	${RELEASE}/usr/local/bin/jonesforth-repl
 T_INSTALLS+=	usr/local/bin/jonesforth-repl
 
 all: jonesforth-runtime

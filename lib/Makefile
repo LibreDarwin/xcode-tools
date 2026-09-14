@@ -23,7 +23,6 @@ CCTOOLS_CFLAGS=	-I${CCTOOLS}/include -I${CCTOOLS}/include/stuff \
 		-Wno-ambiguous-macro -DLTO_SUPPORT \
 		-DCURRENT_PROJECT_VERSION=\"${CCTOOLS_VERSION}\"
 
-RELEASE=	${TOP}/build/release
 XCSELECT=	${TOP}/src/openxc-tools/libxcselect
 
 all: ${OBJBASE}/libstuff.a ${OBJBASE}/libmacho.a \

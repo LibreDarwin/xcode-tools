@@ -34,7 +34,7 @@ T_SRCS+=	build/gen/ld64/version.c
 #
 # So it comes out of ld's own sources and is built beside it.
 LIBCD_SRC=	${LD64_SRC}/ld/libcodedirectory.c
-LIBCD=		${TOP}/build/release/${XCTOOLCHAIN}/usr/lib/libcodedirectory.dylib
+LIBCD=		${RELEASE}/${XCTOOLCHAIN}/usr/lib/libcodedirectory.dylib
 
 T_SRCS:=	${T_SRCS:N*libcodedirectory.c}
 T_LDADD+=	${LIBCD}

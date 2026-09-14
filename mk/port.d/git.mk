@@ -40,7 +40,7 @@ P_PREPARE=	sed -i '' 's|^include .*DT_Signing.mk|-&|' Makefile && \
 # It asks xcrun for the macosx.internal SDK, which is exactly the one
 # this tree assembles.  Naming it directly keeps the build off whatever
 # xcrun happens to answer first.
-INTERNAL_SDK=	${TOP}/build/release/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
 
 GIT_TAG!=	python3 -c "import json;print([p['tag'] for p in \
 		json.load(open('${TOP}/src/apple/distribution-Developer_Tools/release.json'))['projects'] \

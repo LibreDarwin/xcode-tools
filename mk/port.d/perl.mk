@@ -55,7 +55,7 @@ P_PREPARE=	rm -rf /tmp/perl && \
 
 MAKEFILEPATH!=	echo $$(xcode-select -p)/Makefiles
 
-INTERNAL_SDK=	${TOP}/build/release/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
 
 # Apple's Makefile hardcodes "MY_HOST := x86_64" -- their build machine
 # when this was written -- and Platforms/MacOSX/Makefile.inc takes

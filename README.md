@@ -70,7 +70,7 @@ done.
 | Where | What |
 |---|---|
 | `usr/bin` | our 19 reimplementations, plus headerdoc, pngcrush, `xml2man`, `resolveLinks`, `make`/`gnumake`, `bsdmake`, `bmake` |
-| `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools with `c++filt` and `readtapi`, `clang-format`, `clangd`, `tapi`, `dsymutil`, `swiftc`, `swift-demangle`, `swift-stdlib-tool`, `swift-build-tool`, `swift-driver`, `swift-help`, `dyld_info`, `dyld_analyzer`, `c89`/`c99`, developer_cmds, `flex`/`lex`, `gperf`, `m4` with `gm4`/`bm4`, `yacc` with `bison`/`byacc`, the `*-swift-linux-musl-clang.cfg` files, and `bldd`/`llvm-cbe` |
+| `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools with `c++filt` and `readtapi`, `objdump`, `as`, `unwinddump`, `clang-format` with `clang-format-diff.py`, `clangd`, `cache-build-session`, `tapi`, `dsymutil`, `swiftc` with the `swift-frontend` aliases, `swift-demangle`, `swift-stdlib-tool`, `swift-plugin-server`, `swift-build-tool`, `swift-driver`, `swift-help`, `dyld_info`, `dyld_analyzer`, `c89`/`c99`, developer_cmds, `flex`/`lex`, `gperf`, `m4` with `gm4`/`bm4`, `yacc` with `bison`/`byacc`, the `*-swift-linux-musl-clang.cfg` files, and `bldd`/`llvm-cbe` |
 | `Toolchains/XcodeDefault.xctoolchain/usr/lib` | `libtapi.dylib`, clang's resource directory |
 | `usr/libexec` | `PlistBuddy` |
 | `usr/local/bin` | `bmake`, `bsdmake`, `forth`, `bsdiff` |

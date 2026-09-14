@@ -266,7 +266,7 @@ These submodules provide source code for tools previously listed as "no source":
 | c89, c99 | Compatibility | ✅ Covered by clang (aliased) |
 | metal, metal-package-builder | Graphics | ❌ No source (Apple proprietary) |
 | mig | IPC | ❌ No source (not in open-source releases) |
-| unwinddump | Debug | ❌ No source (Apple proprietary) |
+| unwinddump | Debug | ✅ Source: `ld64/src/other/unwinddump.cpp` — built |
 
 ### 6.2 Resource Fork Tools (`Developer/Tools/`)
 
@@ -291,7 +291,7 @@ so these are ours, written against the behaviour of Apple's binaries.
 | appintentsmetadataprocessor | App Intents | ❌ Apple proprietary |
 | appintentsnltrainingprocessor | App Intents | ❌ Apple proprietary |
 | appshortcutstringsprocessor | App Intents | ❌ Apple proprietary |
-| cache-build-session | Build | ❌ Apple proprietary |
+| cache-build-session | Build | ✅ Source in `llvm-project/llvm/tools/` — built |
 | clang-cache | Build | ❌ Apple proprietary |
 | clang-cas-test | Build | ❌ Apple proprietary |
 | createml | ML | ❌ Apple proprietary |
@@ -303,7 +303,7 @@ so these are ours, written against the behaviour of Apple's binaries.
 | swift-experimental-sdk | Swift | ❌ Apple proprietary |
 | swift-package-collection | SPM | ❌ Not in open-source Swift |
 | swift-package-registry | SPM | ❌ Not in open-source Swift |
-| swift-plugin-server | Swift | ✅ Source in `src/swiftlang-llvm/swift/` |
+| swift-plugin-server | Swift | ✅ Source in `src/swiftlang-llvm/swift/` — built |
 | swift-stdlib-tool | Swift | ✅ Source in `src/swiftlang-llvm/swift/` |
 | swift-static | Swift | ❌ Apple proprietary |
 | swift-symbolgraph-extract | Swift | ✅ Source in `src/swiftlang-llvm/swift/` |
@@ -1510,7 +1510,7 @@ Building today:
 | `gperf` | 3.0.3 | yes |
 | `flex` | 2.6.4 | yes |
 | `gnumake` (as `make` + `gnumake`) | 3.81 | yes |
-| `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd`, `tapi` | 21.1.6 | our own build; `tapi` matches Apple's |
+| `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd`, `cache-build-session`, `tapi` | 21.1.6 | our own build; `tapi` matches Apple's |
 
 `tapi` is built from `distribution-Developer_Tools/tapi` (tapi-1600.0.11.8)
 alongside `libtapi`, and reports Apple's `Apple TAPI version 21.0.0
@@ -1741,15 +1741,25 @@ build. Each is here with what stands in the way.
 
 - **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
   itself is built; see the llvm port above.)
-- **`swift-plugin-server`** — not a target this Swift configuration
-  generates. `swift-package`, `swift-build`, `sourcekit-lsp`, `swift-format`
-  and `docc` need SwiftPM, SwiftBuild and repositories this tree does not
-  have yet.
+- **`swift-package`** and its links (`swift-build`, `swift-run`,
+  `swift-test`, `swift-sdk`, `swift-experimental-sdk`,
+  `swift-package-collection`, `swift-package-registry`), `sourcekit-lsp`,
+  `swift-format` and `docc` — need SwiftPM and repositories this tree does
+  not have yet.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,
-  `referenceobjectc`/`referenceobjectcompiler`, `exutil`,
-  `cache-build-session`, `modules-verifier`, `snippet-extract`, `iig`.
+  `referenceobjectc`/`referenceobjectcompiler`, `appintentsmetadataprocessor`,
+  `appintentsnltrainingprocessor`, `appshortcutstringsprocessor`, `exutil`,
+  `modules-verifier`, `snippet-extract`, `iig`.
+
+The ones that are built but differ from Apple's in ways that show:
+`cache-build-session --version` says LLVM where Apple's says Apple LLVM, as
+the rest of the llvm port's tools do, and `as -v` prints our clang's
+version. `swift-plugin-server` names its swift-syntax libraries
+`@rpath/libX.dylib` where Apple's has `@rpath/XcodeDefault/../libX.dylib`,
+a path through a directory Apple's build leaves in `lib/swift/host`; both
+resolve to the same files.
 
 Two outside projects were looked at and are not being taken up:
 

@@ -352,3 +352,6 @@
 [submodule "src/extras/openexr"]
 	path = src/extras/openexr
 	url = https://github.com/AcademySoftwareFoundation/openexr.git
+[submodule "src/extras/acpica"]
+	path = src/extras/acpica
+	url = https://github.com/open-acpica/acpica

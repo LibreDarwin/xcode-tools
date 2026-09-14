@@ -114,6 +114,11 @@ PROGS+=	apple/distribution-Developer_Tools/cctools/otool otool-classic ${XCTOOLC
 PROGS+=	openxc-tools/c89 c89 ${XCTOOLCHAIN}/usr/bin
 PROGS+=	openxc-tools/c99 c99 ${XCTOOLCHAIN}/usr/bin
 
+# as, which Xcode ships as a script running clang's assembler, and
+# clang-format-diff.py, llvm-project's script as Xcode carries it.
+PROGS+=	openxc-tools/as as ${XCTOOLCHAIN}/usr/bin
+PROGS+=	swiftlang-llvm/llvm-project/clang/tools/clang-format clang-format-diff.py ${XCTOOLCHAIN}/usr/bin
+
 # bm4, FreeBSD's m4, which Apple ship beside gm4 and do not publish.  The
 # source is vendored in lib/, which T_DIR reaches from src/; see
 # mk/tool.d/bm4.mk.
@@ -135,6 +140,7 @@ PROGS+=	apple/distribution-Developer_Tools/bootstrap_cmds/migcom.tproj mig ${XCT
 # only builds with MK_PORTS=yes; without it the link fails on tapi::*.
 .if ${MK_PORTS:tl} == "yes"
 PROGS+=	apple/distribution-Developer_Tools/ld64 ld ${XCTOOLCHAIN}/usr/bin
+PROGS+=	apple/distribution-Developer_Tools/ld64 unwinddump ${XCTOOLCHAIN}/usr/bin
 .endif
 
 # libtool builds against src/cctools-helpers/, our reimplementation of

@@ -1,0 +1,21 @@
+#!/bin/zsh
+#
+# as -- assemble with the clang beside this script.
+#
+# Xcode's as is a script of this shape: it drops -q and -Q, the old
+# cctools as's switches for picking an assembler, which clang does not
+# take, and runs clang's integrated assembler on the rest.
+#
+# Copyright (c) 2026 Sunneva N. Mariu <sunnevanattsol@gmail.com>
+# SPDX-License-Identifier: BSD-3-Clause
+
+DIR="$(dirname "$(realpath "$0")")"
+
+for arg do
+  shift
+  [ "$arg" = "-q" ] && continue
+  [ "$arg" = "-Q" ] && continue
+  set -- "$@" "$arg"
+done
+
+$DIR/clang -x assembler -c "$@"

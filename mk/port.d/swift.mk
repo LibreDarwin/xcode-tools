@@ -48,7 +48,8 @@ P_CONFIGURE_ARGS=	\
 # reports when no separate driver is built -- so the frontend is the
 # compiler here, not just a component of it.
 P_MAKE_ARGS=	swift-frontend swift-stdlib-macosx-arm64 \
-		libswiftDemangle.dylib swift-demangle swift-stdlib-tool
+		libswiftDemangle.dylib swift-demangle swift-stdlib-tool \
+		swift-plugin-server SwiftInProcPluginServer
 
 P_NOSTAGE=	yes
 
@@ -86,11 +87,15 @@ P_POST_BUILD=	for f in lib/libswiftDemangle.dylib bin/swift-demangle \
 # swift-demangle is the command-line demangler and swift-stdlib-tool the
 # one Xcode's build runs to copy the Swift runtime into an app bundle.
 # Both link libc++ the way libswiftDemangle does, so the post-build
-# below repoints them too.  swift-plugin-server is not a target this
-# configuration generates, though Apple's toolchain carries it.
+# below repoints them too.  swift-plugin-server is the process a compiler
+# runs macros in when they are given as libraries (-load-plugin-library
+# through -external-plugin-path); it and the SwiftInProcPluginServer
+# library beside the swift-syntax ones in lib/swift/host are asked for by
+# name, since neither is in the targets above.
 P_PROGS=	bin/swift-frontend \
 		bin/swift-demangle \
-		bin/swift-stdlib-tool
+		bin/swift-stdlib-tool \
+		bin/swift-plugin-server
 
 # The standard library: the modules and dylibs swiftc needs to compile
 # anything at all.  swift and swiftc are symlinks onto swift-frontend,

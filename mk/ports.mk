@@ -128,6 +128,16 @@ PORTS+=	swiftlang-llvm/swift-argument-parser swift-argument-parser ${XCTOOLCHAIN
 PORTS+=	swiftlang-llvm/swift-tools-support-core swift-tools-support-core ${XCTOOLCHAIN}/usr/bin
 PORTS+=	swiftlang-llvm/swift-driver swift-driver ${XCTOOLCHAIN}/usr/bin
 
+# What SwiftPM links statically besides the above, in dependency order:
+# swift-crypto and swift-certificates need swift-asn1, and swift-certificates
+# swift-crypto.  The versions are the ones SwiftPM 6.3.3 pins.  Nothing of
+# them is installed.
+PORTS+=	swiftlang-llvm/swift-system swift-system ${XCTOOLCHAIN}/usr/bin
+PORTS+=	swiftlang-llvm/swift-collections swift-collections ${XCTOOLCHAIN}/usr/bin
+PORTS+=	swiftlang-llvm/swift-asn1 swift-asn1 ${XCTOOLCHAIN}/usr/bin
+PORTS+=	swiftlang-llvm/swift-crypto swift-crypto ${XCTOOLCHAIN}/usr/bin
+PORTS+=	swiftlang-llvm/swift-certificates swift-certificates ${XCTOOLCHAIN}/usr/bin
+
 # llvm-cbe reads the LLVM built above, so it comes after it.
 PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 

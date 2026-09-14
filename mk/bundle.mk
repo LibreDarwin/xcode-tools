@@ -393,7 +393,12 @@ bundle-aliases: bundle-dirs
 	    llvm-readelf llvm-readobj llvm-strip llvm-objcopy \
 	    llvm-ranlib llvm-ar \
 	    c++filt llvm-cxxfilt dwarfdump llvm-dwarfdump gcov llvm-cov \
-	    readtapi llvm-readtapi clang-cache clang
+	    readtapi llvm-readtapi clang-cache clang \
+	    objdump llvm-objdump \
+	    swift-api-digester swift-frontend \
+	    swift-symbolgraph-extract swift-frontend \
+	    swift-synthesize-interface swift-frontend \
+	    swift-cache-tool swift-frontend
 	@if [ -e ${TC_DIR}/usr/bin/${t} ] && [ ! -e ${TC_DIR}/usr/bin/${a} ]; then \
 		ln -sfn ${t} ${TC_DIR}/usr/bin/${a}; \
 		${ECHO} "alias: ${a} -> ${t}"; \
@@ -464,7 +469,12 @@ print-installs:
 	    llvm-readelf llvm-readobj llvm-strip llvm-objcopy \
 	    llvm-ranlib llvm-ar \
 	    c++filt llvm-cxxfilt dwarfdump llvm-dwarfdump gcov llvm-cov \
-	    readtapi llvm-readtapi clang-cache clang
+	    readtapi llvm-readtapi clang-cache clang \
+	    objdump llvm-objdump \
+	    swift-api-digester swift-frontend \
+	    swift-symbolgraph-extract swift-frontend \
+	    swift-synthesize-interface swift-frontend \
+	    swift-cache-tool swift-frontend
 	@echo ${XCTOOLCHAIN}/usr/bin/${a}
 .endfor
 .for s in cc c++ clang++ cpp lex flex++ unifdefall \

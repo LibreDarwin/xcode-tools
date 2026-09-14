@@ -1658,8 +1658,30 @@ What each needed, all of it non-obvious:
   `relative_path.diff`, already in the source), so the port installs the same
   skeleton files Apple's `install-files.sh` does.
 
-Apple also ships `lex`, `yacc` and `m4` in the toolchain, but as distinct
-binaries rather than links to flex/bison/gm4, so `P_LINKS` does not cover them.
+- **byacc** — Xcode's is byacc-4, which is Thomas Dickey's byacc 20230201
+  (`src/extras/byacc`, from his byacc-snapshots repository; Apple publish no
+  source). Configured `--disable-btyacc`, since Apple's calls `-B` and `-L`
+  unsupported, and patched in `mk/patches/byacc` for the two ways its output
+  differs: `typedef union` with no `YYSTYPE` tag, and `NULL` in the
+  skeleton. It then writes the same files as Apple's on 431 of 431 grammars.
+
+`bm4`, `m4` and `yacc` are not ports:
+
+- **bm4** — Xcode's bm4-8 is FreeBSD's `usr.bin/m4`, vendored in `lib/bm4`
+  (see its README for the pin) and built by `mk/tool.d/bm4.mk`, its parser
+  by our `byacc`. The one change from FreeBSD's source is that GNU mode is on
+  by default, as in Apple's; `-G` turns it off. It matches Apple's on gm4's
+  examples and on FreeBSD's own m4 tests.
+- **m4, yacc** — Apple's are small programs that choose between gm4 and bm4,
+  and between bison and byacc. Ours are in `src/openxc-tools/{m4,yacc}` over
+  `common/wrapper.c`, written from how Apple's choose: `COMMAND_M4` or
+  `COMMAND_YACC` naming an implementation exactly picks it; otherwise the GNU
+  one runs if its options accept every argument, then the BSD one, then GNU
+  for the error. The choice is run through xcrun with the arguments as
+  getopt_long permuted them, and bison gets `-y` first. Apple's yacc treats
+  `--defines=file` as not bison's, so our bison table gives `--defines` no
+  argument. They match on 449 argument lists across the environment
+  settings.
 
 **Still ahead on this stage**, in dependency order:
 
@@ -1719,8 +1741,6 @@ build. Each is here with what stands in the way.
 
 - **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
   itself is built; see the llvm port above.)
-- **`m4`/`bm4`, `yacc`/`byacc`** — Apple's projects are bm4-8 and byacc-4,
-  and neither is in the Developer Tools release.
 - **`swift-plugin-server`** — not a target this Swift configuration
   generates. `swift-package`, `swift-build`, `sourcekit-lsp`, `swift-format`
   and `docc` need SwiftPM, SwiftBuild and repositories this tree does not

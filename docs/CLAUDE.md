@@ -1534,21 +1534,44 @@ that option, this source release always pretty-printed. With it, `stubify`
 (default, v3, v4, `--no-uuids`), `archive --info`/`--extract`, the error
 cases and every help page match Apple's byte for byte.
 | `dyld` (late) — `dyld_info`, `dyld_analyzer` | dyld-1378 | `dyld_analyzer` yes; `dyld_info` all but `udot`/`sdot` in `-disassemble` |
-| `llbuild` — `swift-build-tool` | swift-6.3 snapshot, `llbuild-24700.0.19` | yes |
-| `swift-driver` — `swift-driver`, `swift-help`, `libSwiftToolsSupport.dylib` (with `swift-argument-parser` and `swift-tools-support-core`) | swift-6.3.3, reports 1.148.6 | compiles, diagnostics and errors yes; see below |
+| `llbuild` — `swift-build-tool`, `llbuild.framework` | swift-6.3.3, `llbuild-24700.0.19` | yes; the framework's exports, load commands, run path and `version.plist` are Apple's |
+| `swift-driver` — `swift-driver`, `swift-help`, `libSwiftToolsSupport.dylib`, `libSwiftDriver.dylib` (with `swift-argument-parser` and `swift-tools-support-core`) | swift-6.3.3, reports 1.148.6 | compiles, diagnostics and errors yes; see below |
+| `swift-system`, `swift-collections`, `swift-asn1`, `swift-crypto`, `swift-certificates` | the versions SwiftPM 6.3.3 pins | nothing installed; SwiftPM links them statically |
+| `swift-tools-protocols` — the `LanguageServerProtocol`, `BuildServerProtocol`, `LanguageServerProtocolTransport`, `SKLogging` and `ToolsProtocolsSwiftExtensions` frameworks | 0.0.9 | exports, run paths and `version.plist` are Apple's; load order differs |
+| `swift-build` — `SwiftBuild.framework`, with the build service, its frameworks, the platform plugins and `swbuild` | swift-6.3.3 | see below |
 
 `swiftc` hands every compile to a `swift-driver` beside it, and falls back
 to the deprecated C++ driver, with a warning, when there is none. The driver
 is four CMake ports built with this tree's `swiftc`
 (`mk/with-swift-cmake.mk`, which also names the SDK — CMake gives swiftc none
-when it links, and the link fails on `-lobjc`): the argument parser and
-llbuild's Swift bindings are linked in statically; swift-tools-support-core is
-linked into one `libSwiftToolsSupport.dylib`, the SwiftPM product Apple's
-toolchain carries, and handed to the driver's CMake through a `TSCConfig` of
-our own. The driver needs the swift port's `lib_InternalSwiftScan.dylib` in
+when it links, and the link fails on `-lobjc` — and macOS 14.0, which is what
+Xcode's Swift tools are built for and which swiftc and CMake otherwise leave at
+the SDK's 26): the argument parser is linked in statically;
+swift-tools-support-core is linked into one `libSwiftToolsSupport.dylib`, the
+SwiftPM product Apple's toolchain carries, and handed to the driver's CMake
+through a `TSCConfig` of our own; and llbuild comes from `llbuild.framework`.
+The driver needs the swift port's `lib_InternalSwiftScan.dylib` in
 `lib/swift/host` — as a symlink into `host/compiler`, where it can load its
 `lib_Compiler*` libraries; a plain copy in `host` fails to load and the
 driver warns on every compile.
+
+`llbuild.framework` is llbuild's C API and its Swift bindings in one library,
+installed in `SharedFrameworks` as Xcode's is. The bindings are compiled as
+module `llbuild`, the Swift overlay of the framework's own clang module, not
+as `llbuildSwift`, and nothing is exported but the C API and that module —
+CMake has no target of that shape, so `mk/scripts/build-llbuild-framework.sh`
+links it from the static libraries. It exports Apple's 833 symbols and no
+others. `libSwiftDriver.dylib` is SwiftDriver and SwiftOptions re-exporting
+`libSwiftToolsSupport.dylib`, linked from the driver's static libraries by
+`mk/scripts/link-swiftdriver.sh`, which also writes the weak and the strong
+CMake configs SwiftBuild and SwiftPM link it through.
+
+Frameworks are laid out by `mk/scripts/make-framework.sh` and bundles by
+`mk/scripts/make-bundle.sh`, both writing their plists through
+`bundle-plists.sh`: `version.plist` comes out byte for byte as Xcode's, and
+`Info.plist` has Xcode's keys, the build-machine and SDK ones describing this
+machine. A port names what it installs into `SharedFrameworks` with
+`P_FRAMEWORKS`.
 
 Against Apple's, the compile itself, diagnostics, a missing file, a bad
 option and `-emit-module` match. What does not:
@@ -1564,9 +1587,41 @@ option and `-emit-module` match. What does not:
   `-swift-ptrauth-mode` and `-sign-class-ro`, and `libSwiftToolsSupport`
   lacks about a hundred symbols Apple's has (`TracingEvent`, `orderedZip`):
   both come from sources newer than any published tag.
-- Apple's `swift-driver` links `llbuild.framework` from
-  `Xcode.app/Contents/SharedFrameworks`, outside the toolchain; ours has it
-  linked in, and so also links libsqlite3, libncurses and libc++.
+- `libSwiftDriver.dylib` lacks 97 of Apple's 6345 exports —
+  `PlatformSupport`, `generateJITCompileJobs`, `CommandInvocation` and their
+  neighbours — which are in no published swift-driver: not the 6.3.3 tag,
+  release/6.3 or main.
+- The load commands are Apple's but for where libSystem falls, and the Swift
+  overlays the newer SDK splits (`libswift_DarwinFoundation*`).
+
+`SwiftBuild.framework` is the swift-build port: CMake builds the libraries,
+the build service and `swbuild` from a patched copy, and
+`mk/scripts/assemble-swiftbuild.sh` renames them to their framework install
+names, links the seven platform plugins as bundles, gives every binary Xcode's
+run paths, and lays it out with the service bundle, its fifteen frameworks and
+the resources Xcode's carry. The patches (`mk/patches/swift-build`) are the
+difference between a CMake build and Xcode's: plugins load as bundles rather
+than being linked in, a module finds its resources in its own framework,
+SwiftBuild and SWBProjectModel alone get library evolution, and they get
+Xcode's ABI names, `XCBuild` and `XCBProjectModel`, which swift-package's
+references to them are mangled with. It links `llbuild.framework`,
+`libSwiftDriver.dylib` and `libRemarks.dylib` (weakly, as Xcode's do) and the
+tools-protocols frameworks.
+
+Against Xcode's, the layout is the same, all 32 binaries have Xcode's run
+paths and every `version.plist` is identical; 27 binaries export exactly
+Xcode's symbols. What does not match:
+
+- `XCBSpecifications.ideplugin` is not built. Only the IDE reads it, and its
+  `XCBSpecifications.xcplugindata` — which specs go to which domain — is not in
+  the source.
+- SWBCore (31), SwiftBuild (2), SWBTaskConstruction (2) and SWBTaskExecution
+  (3) differ in symbols Apple's own sources, newer than 6.3.3, have.
+- SWBUtil exports the argument parser, which Xcode's takes from the system's
+  private `ArgumentParserInternal.framework`, as SWBTaskExecution and
+  SWBUniversalPlatform do.
+- The load commands are in another order, and dead-stripping drops a few
+  libraries Xcode's still name.
 
 `c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
 source for either, so both are written from what Apple's pass to the clang
@@ -1753,9 +1808,9 @@ build. Each is here with what stands in the way.
   itself is built; see the llvm port above.)
 - **`swift-package`** and its links (`swift-build`, `swift-run`,
   `swift-test`, `swift-sdk`, `swift-experimental-sdk`,
-  `swift-package-collection`, `swift-package-registry`), `sourcekit-lsp`,
-  `swift-format` and `docc` — need SwiftPM and repositories this tree does
-  not have yet.
+  `swift-package-collection`, `swift-package-registry`) — SwiftPM itself is
+  not built yet; everything it links is, `SwiftBuild.framework` included.
+  `sourcekit-lsp`, `swift-format` and `docc` come after it.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,

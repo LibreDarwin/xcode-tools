@@ -114,6 +114,11 @@ PROGS+=	apple/distribution-Developer_Tools/cctools/otool otool-classic ${XCTOOLC
 PROGS+=	openxc-tools/c89 c89 ${XCTOOLCHAIN}/usr/bin
 PROGS+=	openxc-tools/c99 c99 ${XCTOOLCHAIN}/usr/bin
 
+# bm4, FreeBSD's m4, which Apple ship beside gm4 and do not publish.  The
+# source is vendored in lib/, which T_DIR reaches from src/; see
+# mk/tool.d/bm4.mk.
+PROGS+=	../lib/bm4 bm4 ${XCTOOLCHAIN}/usr/bin
+
 # mig and migcom, from bootstrap_cmds.  Most of an SDK's mach/ headers
 # are mig's output rather than files anyone wrote, so these come before
 # anything that wants them.  migcom goes in libexec because that is

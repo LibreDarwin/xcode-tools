@@ -138,6 +138,10 @@ PORTS+=	swiftlang-llvm/swift-asn1 swift-asn1 ${XCTOOLCHAIN}/usr/bin
 PORTS+=	swiftlang-llvm/swift-crypto swift-crypto ${XCTOOLCHAIN}/usr/bin
 PORTS+=	swiftlang-llvm/swift-certificates swift-certificates ${XCTOOLCHAIN}/usr/bin
 
+# The Language Server and Build Server Protocol frameworks, which SwiftBuild
+# and swift-package load from SharedFrameworks.
+PORTS+=	swiftlang-llvm/swift-tools-protocols swift-tools-protocols ${XCTOOLCHAIN}/usr/bin
+
 # llvm-cbe reads the LLVM built above, so it comes after it.
 PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 

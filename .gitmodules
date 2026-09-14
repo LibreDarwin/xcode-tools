@@ -382,3 +382,6 @@
 [submodule "src/swiftlang-llvm/swift-tools-protocols"]
 	path = src/swiftlang-llvm/swift-tools-protocols
 	url = https://github.com/swiftlang/swift-tools-protocols
+[submodule "src/extras/ClascalCompiler"]
+	path = src/extras/ClascalCompiler
+	url = https://github.com/maddisonmeier-wf/ClascalCompiler

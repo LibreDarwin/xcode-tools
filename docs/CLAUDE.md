@@ -29,7 +29,7 @@ invoked from the same paths with the same arguments.
    (BSD make). No GNU make extensions like `$(shell ...)`, `$(CURDIR)`,
    or GNU-style pattern rules with path prefixes. Use `.for` loops, `!=`
    for command substitution, and `${.CURDIR}`.
-4. **Build hygiene:** All build artifacts go to `build/` (`build/release/`
+4. **Build hygiene:** All build artifacts go to `build/` (`build/release/Developer/`
    for the staged Developer tree, `build/obj/<dir>/` for objects). The source
    tree, submodules included, must remain pristine after a full build.
 5. **Submodule discipline:** Each external dependency is a git submodule.
@@ -396,18 +396,25 @@ the individual upstream repositories.
 
 ### 8.2 Output layout
 
-`build/release/` is a drop-in replacement for Xcode's `Developer/` directory,
-and is the product — there is no `install` target and no `PREFIX`.
+`build/release/` is laid out as `Xcode.app/Contents`, and is the product —
+there is no `install` target and no `PREFIX`. `build/release/Developer/` is a
+drop-in replacement for Xcode's `Developer/` directory; `SharedFrameworks/`
+sits beside it as Xcode's does, because swift-package and SwiftBuild load
+their frameworks through `@executable_path/../../../../../SharedFrameworks`;
+and `opt/bin` holds the extras, which are not part of Xcode's layout.
 
 ```
 build/obj/<dir>       per-tool object files
 build/gen/<tool>      build-time generated sources
 build/lib             static libraries
 build/release/
-  usr/{bin,lib,libexec,share}
-  Toolchains/XcodeDefault.xctoolchain/usr/bin
-  Platforms/<P>.platform/Developer/SDKs/<S>.sdk
-  Tools/
+  Developer/
+    usr/{bin,lib,libexec,share}
+    Toolchains/XcodeDefault.xctoolchain/usr/bin
+    Platforms/<P>.platform/Developer/SDKs/<S>.sdk
+    Tools/
+  SharedFrameworks/
+  opt/bin
 ```
 
 ### 8.3 Variables
@@ -417,7 +424,10 @@ build/release/
 | `TOP` | `${.CURDIR}` | Repository root, passed down to every sub-make |
 | `CC` / `CXX` | `cc -pipe` / `c++` | Compilers |
 | `CFLAGS` | `-O2 -g -Wall -Wno-unused-parameter` | Global C flags |
-| `XCTOOLCHAIN` | `Toolchains/XcodeDefault.xctoolchain` | Toolchain bundle path under `build/release/` |
+| `RELEASE_ROOT` | `${TOP}/build/release` | The release tree |
+| `RELEASE` | `${RELEASE_ROOT}/Developer` | The Developer directory; what makefiles install into |
+| `SHARED_FRAMEWORKS` | `${RELEASE_ROOT}/SharedFrameworks` | Xcode's SharedFrameworks, beside it |
+| `XCTOOLCHAIN` | `Toolchains/XcodeDefault.xctoolchain` | Toolchain bundle path under `${RELEASE}` |
 | `MK_TOOLCHAIN` | `yes` | Build the binutils tier (cctools, ld64) |
 
 ## 9. Phased Roadmap
@@ -636,7 +646,7 @@ Three traps worth not rediscovering:
 
 ### Stage 3 — `.xctoolchain` and `.sdk` bundle emission ✅
 
-`mk/bundle.mk` emits the metadata that makes `build/release/` a Developer
+`mk/bundle.mk` emits the metadata that makes `build/release/Developer/` a Developer
 directory rather than a loose bin tree, via the `bundles` target:
 
 ```
@@ -661,13 +671,13 @@ our tools have to answer to Apple's argv.
 `src/openxc-tools/common/devpath.c` derives the Developer directory from the running
 binary's own location (`<developer_dir>/usr/bin/<tool>`), used by `xcrun`,
 `xcodebuild` and `xcode-select` through `mk/with-devpath.mk`. A freshly built
-or relocated `build/release/` therefore works with no configuration and no
+or relocated `build/release/Developer/` therefore works with no configuration and no
 `DEVELOPER_DIR`:
 
 ```
-$ build/release/usr/bin/xcrun --find strip
-.../build/release/Toolchains/XcodeDefault.toolchain/usr/bin/strip
-$ build/release/usr/bin/xcrun lipo -info /bin/ls
+$ build/release/Developer/usr/bin/xcrun --find strip
+.../build/release/Developer/Toolchains/XcodeDefault.toolchain/usr/bin/strip
+$ build/release/Developer/usr/bin/xcrun lipo -info /bin/ls
 Architectures in the fat file: /bin/ls are: x86_64 arm64e
 ```
 
@@ -1863,7 +1873,8 @@ answers questions about the wrong artifact.
 This matters more than it looks like, because the tree builds more than the
 Xcode tools themselves: `ipsw` and the Go that builds it, `git`, `perl`,
 `python3`, `pip3`, `bmake`, `xmllint`, `xsltproc`.  Check `mk/ports.mk` and
-`build/release/{usr/bin,usr/local/bin,opt/bin}` before reaching for a tool,
+`build/release/Developer/{usr/bin,usr/local/bin}` and `build/release/opt/bin`
+before reaching for a tool,
 and before proposing to add one that may already be there.  The
 reverse-engineering extras -- ipsw, ldid, zsign, macho, machsec, ktool,
 patchelf, unxip, snaputil -- are in `opt/bin`; bldd and llvm-cbe stay in the
@@ -1914,8 +1925,9 @@ claims.
    ```
    PROGS+=	openxc-tools/<tool-name> <tool-name> usr/bin
    ```
-   The third field is the path under `build/release/`, mirroring where Xcode
-   ships the tool: `usr/bin`, `usr/libexec`, or `${XCTOOLCHAIN}/usr/bin`.
+   The third field is the path under `build/release/Developer/`, mirroring where
+   Xcode ships the tool: `usr/bin`, `usr/libexec`, or `${XCTOOLCHAIN}/usr/bin`
+   -- or `opt/bin`, under `build/release/` itself, for an extra.
 3. **Only if it needs flags**, add `mk/tool.d/<tool-name>.mk`. Sources are
    discovered automatically, so a plain tool needs no fragment at all:
    ```makefile
@@ -1947,7 +1959,7 @@ list.
 Every tool must pass:
 1. **Build test:** `bmake` succeeds without errors or warnings
 2. **Inventory test:** every entry in `mk/progs.mk` produces a binary at its
-   declared `build/release/<suffix>/<prog>` path (`bmake list-progs`)
+   declared `build/release/Developer/<suffix>/<prog>` path (`bmake list-progs`)
 3. **Binary verification:** all binaries are valid Mach-O (use `file`)
 4. **Functionality test:** tools produce expected output for basic operations
 5. **Clean test:** `bmake clean` removes all build artifacts
@@ -1961,8 +1973,8 @@ Every tool must pass:
    byte-identical binaries. This is section 12 rule 6, and it only holds
    because of `-Wl,-reproducible` (see section 8.1).
    ```sh
-   bmake clean && bmake && shasum build/release/usr/bin/* > /tmp/r1
-   bmake clean && bmake && shasum build/release/usr/bin/* > /tmp/r2
+   bmake clean && bmake && shasum build/release/Developer/usr/bin/* > /tmp/r1
+   bmake clean && bmake && shasum build/release/Developer/usr/bin/* > /tmp/r2
    diff /tmp/r1 /tmp/r2
    ```
 
@@ -2051,7 +2063,7 @@ bmake
 
 # 4. Check results
 bmake list-progs
-ls build/release/usr/bin/
+ls build/release/Developer/usr/bin/
 
 # 5. Clean up
 bmake clean

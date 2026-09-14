@@ -886,7 +886,9 @@ We currently have **10 open-source reimaginations** of Apple's command-line tool
   - `build/obj/<dir>/` — object files
   - `build/gen/<tool>/` — build-time generated sources
   - `build/lib/` — static libraries
-  - `build/release/` — staged tree, a drop-in replacement for Xcode's `Developer/`
+  - `build/release/` — staged tree laid out as `Xcode.app/Contents`: `Developer/`
+    is a drop-in replacement for Xcode's, with `SharedFrameworks/` beside it and
+    `opt/bin` for the extras
 - Uses `.for` loops for explicit compile rules, `!=` instead of `$(shell ...)`,
   and `${.CURDIR}` instead of `$(CURDIR)`
 - `-Wl,-reproducible` on every link, so two clean builds are byte-identical

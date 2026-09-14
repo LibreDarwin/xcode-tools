@@ -3,7 +3,7 @@ xcode-tools
 
 An open-source reimplementation of Apple's Xcode command-line developer tools.
 
-The goal is a `build/release/` tree that can stand in for
+The goal is a `build/release/Developer/` tree that can stand in for
 `/Applications/Xcode.app/Contents/Developer` — the same layout, the same tool
 names, the same behaviour — built entirely from open source. Everything follows
 Apple's own releases (APSL/GPL/BSD/Apache as applicable), with BSD-licensed
@@ -153,14 +153,16 @@ bmake
 bmake check        # verify every inventory entry produced a binary
 ```
 
-Everything lands in `build/release/`. There is no `install` target — the
+Everything lands in `build/release/`, laid out as `Xcode.app/Contents`:
+`Developer/`, with `SharedFrameworks/` beside it and `opt/bin` for the
+extras. There is no `install` target — the
 release tree *is* the product, and the tools locate their own Developer
 directory from the running binary, so a built or moved tree works with no
 configuration:
 
 ```sh
-build/release/usr/bin/xcrun --find ld
-build/release/usr/bin/xcodebuild -showsdks
+build/release/Developer/usr/bin/xcrun --find ld
+build/release/Developer/usr/bin/xcodebuild -showsdks
 ```
 
 Useful targets:

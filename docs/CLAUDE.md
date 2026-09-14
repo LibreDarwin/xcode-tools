@@ -1510,7 +1510,19 @@ Building today:
 | `gperf` | 3.0.3 | yes |
 | `flex` | 2.6.4 | yes |
 | `gnumake` (as `make` + `gnumake`) | 3.81 | yes |
-| `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd` | 21.1.6 | our own build |
+| `llvm` — clang 21.1.6, `libtapi.dylib`, plus `llvm-nm`, `llvm-otool`, `llvm-objdump`, `llvm-size`, `llvm-strings`, `llvm-dwarfdump`, `llvm-cov`, `llvm-profdata`, `dsymutil`, `llvm-cxxfilt` (`c++filt`), `llvm-readtapi` (`readtapi`), `llvm-cas`, `clang-cas-test`, `clang-format`, `clangd`, `tapi` | 21.1.6 | our own build; `tapi` matches Apple's |
+
+`tapi` is built from `distribution-Developer_Tools/tapi` (tapi-1600.0.11.8)
+alongside `libtapi`, and reports Apple's `Apple TAPI version 21.0.0
+(tapi-2100.0.2.6)` — as does `ld -v`, which asks libtapi. The command did not
+build against LLVM 21 until `mk/patches/tapi/0003`: LLVM's TableGen now writes
+option tables the old `OPTION` macro cannot take, clang's
+`DiagnosticOptions` is no longer reference-counted, `FileManager` hands out
+`FileEntryRef`s, and several clang AST accessors are gone. The same patch adds
+`--no-compact`: Apple's tapi writes TBD v5 JSON compact by default and has
+that option, this source release always pretty-printed. With it, `stubify`
+(default, v3, v4, `--no-uuids`), `archive --info`/`--extract`, the error
+cases and every help page match Apple's byte for byte.
 | `dyld` (late) — `dyld_info`, `dyld_analyzer` | dyld-1378 | `dyld_analyzer` yes; `dyld_info` all but `udot`/`sdot` in `-disassemble` |
 | `llbuild` — `swift-build-tool` | swift-6.3 snapshot, `llbuild-24700.0.19` | yes |
 | `swift-driver` — `swift-driver`, `swift-help`, `libSwiftToolsSupport.dylib` (with `swift-argument-parser` and `swift-tools-support-core`) | swift-6.3.3, reports 1.148.6 | compiles, diagnostics and errors yes; see below |
@@ -1706,13 +1718,8 @@ twice.
 Xcode's `XcodeDefault.xctoolchain/usr/bin` has tools this tree does not
 build. Each is here with what stands in the way.
 
-- **`tapi`, `tapi-analyze`** — `distribution-Developer_Tools/tapi` is
-  tapi-1600.0.11.8; Xcode's is tapi-2100. The llvm port builds `libtapi` from
-  it, which is all ld64 needs, but the `tapi` command fails in about 250
-  places against LLVM 21: the option tables LLVM's TableGen now writes pass
-  more fields than tapi's `OPTION` macro takes, `clang::DiagnosticOptions` is
-  no longer reference-counted, and clang AST accessors it calls are gone.
-  `tapi-analyze` is not in the published source at all.
+- **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
+  itself is built; see the llvm port above.)
 - **`m4`/`bm4`, `yacc`/`byacc`** — Apple's projects are bm4-8 and byacc-4,
   and neither is in the Developer Tools release.
 - **`gm4`, `bison`** — carried, and blocked by their bundled gnulib; see

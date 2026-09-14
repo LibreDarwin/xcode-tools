@@ -49,7 +49,7 @@ for f in $(grep -rl -E '\.(startswith|endswith|equals)\(|get(Directory|File)\(|l
 		-e 's|\.endswith(|.ends_with(|g' \
 		-e 's|!\([A-Za-z_][A-Za-z0-9_]*\)\.equals(|\1 != (|g' \
 		-e 's|\.equals(| == (|g' \
-		-e 's|getDirectory(|getOptionalDirectoryRef(|g' \
+		-e 's|getDirectory(\([^"]\)|getOptionalDirectoryRef(\1|g' \
 		-e 's|\.getFile(|.getOptionalFileRef(|g' \
 		-e 's|->getFile(|->getOptionalFileRef(|g' \
 		-e 's|llvm/CodeGen/LowLevelType\.h|llvm/CodeGenTypes/LowLevelType.h|g' \

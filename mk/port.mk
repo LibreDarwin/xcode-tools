@@ -29,6 +29,9 @@
 #			the reason this exists: without lib/clang/<ver>,
 #			clang cannot find its own stdarg.h and anything
 #			beyond trivial C fails to compile.
+#	P_FRAMEWORKS	frameworks to install into SharedFrameworks, beside
+#			the Developer directory, relative to the same prefix.
+#			Each replaces the one already there.
 #	P_RELEASE_MERGE	like P_RELEASE_TREES, but merged into the
 #			destination instead of replacing it.  For the shared
 #			prefixes -- usr/local/include, usr/local/lib -- where
@@ -228,6 +231,12 @@ all: ${P_WORKDIR}/.staged
 	@cp -R ${P_PROGSRC}/${t} ${RELEASE}/${XCTOOLCHAIN}/usr/${t}
 	@${ECHO} "staged: ${XCTOOLCHAIN}/usr/${t}/"
 .endfor
+.for f in ${P_FRAMEWORKS}
+	@mkdir -p ${SHARED_FRAMEWORKS}
+	@rm -rf ${SHARED_FRAMEWORKS}/${f:T}
+	@cp -R ${P_PROGSRC}/${f} ${SHARED_FRAMEWORKS}/${f:T}
+	@${ECHO} "staged: SharedFrameworks/${f:T}"
+.endfor
 .for src dst in ${P_RELEASE_TREES}
 	@mkdir -p ${RELEASE}/${dst:H}
 	@rm -rf ${RELEASE}/${dst}
@@ -359,6 +368,10 @@ check:
 .for t in ${P_TREES}
 	@test -d ${RELEASE}/${XCTOOLCHAIN}/usr/${t} || \
 		{ ${ECHO} "MISSING: ${XCTOOLCHAIN}/usr/${t}/  (port ${P_NAME})"; exit 1; }
+.endfor
+.for f in ${P_FRAMEWORKS}
+	@test -e ${SHARED_FRAMEWORKS}/${f:T}/${f:T:R} || \
+		{ ${ECHO} "MISSING: SharedFrameworks/${f:T}  (port ${P_NAME})"; exit 1; }
 .endfor
 # A port that installs only directories -- a library with headers and
 # no programs -- would otherwise pass this check having installed

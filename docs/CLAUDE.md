@@ -1895,7 +1895,7 @@ For codesign specifically (our most tested tool):
 
 ```sh
 cc test.c -o test_bin
-build/release/usr/bin/codesign -f -s - test_bin
+build/release/Developer/usr/bin/codesign -f -s - test_bin
 codesign --verify --strict test_bin
 ```
 
@@ -1939,7 +1939,7 @@ claims.
    be TOP-relative paths for sources outside the tool's directory), `T_CFLAGS`,
    `T_LDADD`, `T_LINKS` (extra hardlinked names), `T_SCRIPT` (install a script
    instead of compiling), `T_NOBUILD` (skip).
-4. Test: `bmake && build/release/usr/bin/<tool-name> --help`
+4. Test: `bmake && build/release/Developer/usr/bin/<tool-name> --help`
 
 There is no per-tool Makefile to write, and nothing to register in a `SUBDIRS`
 list.

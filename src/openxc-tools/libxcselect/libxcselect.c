@@ -59,32 +59,33 @@ looks_like_cltools(const char *path)
 }
 
 /*
- * The Developer directory this binary is installed in, if any:
- * <developer_dir>/usr/bin/<tool>, so three components come off.
+ * The Developer directory this binary is installed in, if any: the
+ * nearest directory above it with a usr/bin/xcrun.  Not a fixed number of
+ * components -- xcrun is in <developer_dir>/usr/bin, but m4 and yacc are in
+ * <developer_dir>/Toolchains/XcodeDefault.xctoolchain/usr/bin, and taking
+ * three off those names the toolchain, where there is no xcrun to run.
+ * The root is never an answer: every Mac has a /usr/bin/xcrun.
  */
 static bool
 self_developer_dir(char *buf, size_t buf_size)
 {
-	char raw[PATH_MAX], real[PATH_MAX];
+	char raw[PATH_MAX], real[PATH_MAX], xcrun[PATH_MAX];
 	uint32_t size = sizeof(raw);
 	char *slash;
-	int i;
 
 	if (_NSGetExecutablePath(raw, &size) != 0)
 		return false;
 	if (realpath(raw, real) == NULL)
 		return false;
 
-	for (i = 0; i < 3; i++) {
-		if ((slash = strrchr(real, '/')) == NULL)
-			return false;
+	while ((slash = strrchr(real, '/')) != NULL && slash != real) {
 		*slash = '\0';
+		if (snprintf(xcrun, sizeof(xcrun), "%s/usr/bin/xcrun", real) <
+		    (int)sizeof(xcrun) && access(xcrun, X_OK) == 0)
+			return strlcpy(buf, real, buf_size) < buf_size;
 	}
 
-	if (real[0] == '\0' || !is_dir(real))
-		return false;
-
-	return strlcpy(buf, real, buf_size) < buf_size;
+	return false;
 }
 
 /*

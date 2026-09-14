@@ -68,6 +68,9 @@ P_CONFIGURE_ARGS=	\
 	-DCOMPILER_RT_BUILD_CTX_PROFILE=OFF \
 	-DLLVM_EXTERNAL_PROJECTS=tapi \
 	-DLLVM_EXTERNAL_TAPI_SOURCE_DIR=${P_WORKDIR}/tapi-src \
+	-DTAPI_VENDOR=Apple \
+	-DTAPI_FULL_VERSION=21.0.0 \
+	-DTAPI_REPOSITORY_STRING=tapi-2100.0.2.6 \
 	-DLINKER_SUPPORTS_NO_INITS=FALSE \
 	-DLLVM_TARGETS_TO_BUILD="AArch64;X86" \
 	-DLLVM_ENABLE_ASSERTIONS=OFF \
@@ -91,10 +94,10 @@ P_NOSTAGE=	yes
 # Build only the targets we ship, not "all".
 #
 # This matters for more than build time: with tapi in the tree, "all"
-# also builds the tapi CLI tool and its APIVerifier/Frontend libraries,
-# which carry drift beyond what the scripts and patches cover (clang's
-# DiagnosticOptions is no longer reference-counted, for one).  libtapi
-# itself -- the only part ld64 needs -- builds clean.
+# also builds tapi-run, tapi-frontend and the rest of tapi's own test
+# tools, which nothing here ships.  libtapi, which ld64 links, and the
+# tapi command itself are asked for by name; the command needs
+# mk/patches/tapi/0003 to build against LLVM 21.
 #
 # The ELF set: lld links, llvm-ar archives, llvm-objcopy and llvm-readobj
 # edit and inspect.  Each also builds the aliases beside it (ld.lld,
@@ -117,7 +120,7 @@ P_MAKE_ARGS=	clang llvm-nm llvm-otool llvm-objdump llvm-size \
 		llvm-strings dsymutil llvm-dwarfdump llvm-cov \
 		llvm-profdata libtapi \
 		lld llvm-ar llvm-objcopy llvm-readobj \
-		llvm-cxxfilt llvm-readtapi llvm-cas clang-cas-test \
+		llvm-cxxfilt llvm-readtapi llvm-cas clang-cas-test tapi \
 		clang-format clangd \
 		llvm-libraries clang-libraries \
 		LTO libclang libIndexStore.dylib \
@@ -186,7 +189,8 @@ P_PROGS=	bin/clang \
 		bin/llvm-cas \
 		bin/clang-cas-test \
 		bin/clang-format \
-		bin/clangd
+		bin/clangd \
+		bin/tapi
 
 # tapi is built from a patched copy rather than the submodule: it calls
 # llvm_check_linker_flag(), a helper current llvm-project no longer

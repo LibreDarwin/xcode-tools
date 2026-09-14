@@ -1,0 +1,708 @@
+The tapi command against LLVM 21, and its --no-compact option.
+
+libtapi builds with the scripts and the first two patches; the command and
+the libraries only it uses do not.  LLVM 21's option tables are written by
+TableGen with more fields than tapi's OPTION macro took, so the driver
+uses LLVM_MAKE_OPT_ID and LLVM_CONSTRUCT_OPT_INFO as LLVM's own tools do.
+clang's DiagnosticOptions is no longer reference-counted and is passed by
+reference; FileManager hands out FileEntryRef and DirectoryEntryRef rather
+than pointers; the thunk manglers take the elide-override flag; clang's AST
+dropped MemberPointerType::getClass and the dependent-template accessors,
+which the structural-equivalence copy now reaches the way clang's does;
+CompilerInstance takes its invocation at construction; endianness moved to
+llvm::endianness; InterfaceFile::addRPath takes the path first.
+
+--no-compact is Apple's: tapi-2100 writes TBD v5 JSON compact unless asked
+not to, and has the option on archive, stubify and installapi.  This tapi
+predates it and always pretty-printed, so the writer takes the choice and
+the default follows Apple's.
+
+--- a/include/tapi/Core/InterfaceFileManager.h
++++ b/include/tapi/Core/InterfaceFileManager.h
+@@ -25,7 +25,7 @@
+ 
+ class InterfaceFileManager {
+ public:
+-  InterfaceFileManager(FileManager &fm, bool isVolatile);
++  InterfaceFileManager(FileManager &fm, bool isVolatile, bool compact = true);
+   Expected<APIs &> readFile(const std::string &path,
+                             ReadFlags flags = ReadFlags::Symbols);
+   Error writeFile(const std::string &path, const InterfaceFile *file,
+--- a/include/tapi/Core/JSONReaderWriter.h
++++ b/include/tapi/Core/JSONReaderWriter.h
+@@ -42,6 +42,8 @@
+ 
+ class JSONWriter final : public Writer {
+ public:
++  explicit JSONWriter(bool compact = true) : compact(compact) {}
++
+   bool canWrite(const InterfaceFile *file, FileType fileType) const override {
+     return fileType >= FileType::TBD_V5 ||
+            file->getFileType() >= FileType::TBD_V5;
+@@ -49,6 +51,9 @@
+ 
+   Error writeFile(raw_ostream &os, const InterfaceFile *file,
+                   FileType fileType = FileType::TBD_V5) const override;
++
++private:
++  bool compact;
+ };
+ 
+ TAPI_NAMESPACE_INTERNAL_END
+--- a/include/tapi/Core/Registry.h
++++ b/include/tapi/Core/Registry.h
+@@ -109,7 +109,7 @@
+   void addYAMLWriters();
+   void addDiagnosticReader();
+   void addJSONReaders();
+-  void addJSONWriters();
++  void addJSONWriters(bool compact = true);
+ 
+ private:
+   std::vector<std::unique_ptr<Reader>> _readers;
+--- a/include/tapi/Diagnostics/Diagnostics.h
++++ b/include/tapi/Diagnostics/Diagnostics.h
+@@ -98,7 +98,7 @@
+   clang::DiagnosticIDs::Level getDiagnosticLevel(unsigned diagID);
+ 
+ private:
+-  IntrusiveRefCntPtr<clang::DiagnosticOptions> diagOpts;
++  std::unique_ptr<clang::DiagnosticOptions> diagOpts;
+   IntrusiveRefCntPtr<clang::DiagnosticsEngine> diag;
+   clang::LangOptions langOpts;
+   bool warningsAsErrors = false;
+--- a/include/tapi/Driver/DriverOptions.h
++++ b/include/tapi/Driver/DriverOptions.h
+@@ -10,6 +10,7 @@
+ #define TAPI_DRIVER_DRIVER_OPTIONS_H
+ 
+ #include "tapi/Defines.h"
++#include "llvm/Option/OptTable.h"
+ 
+ namespace llvm {
+ namespace opt {
+@@ -36,9 +37,7 @@
+ // Create enum with OPT_xxx values for each option in TAPIOptions.td.
+ enum ID {
+   OPT_INVALID = 0, // This is not an option ID.
+-#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
+-               HELPTEXT, METAVAR, VALUES)                                      \
+-  OPT_##ID,
++#define OPTION(...) LLVM_MAKE_OPT_ID(__VA_ARGS__),
+ #include "tapi/Driver/TAPIOptions.inc"
+   LastOption
+ #undef OPTION
+--- a/include/tapi/Driver/Options.h
++++ b/include/tapi/Driver/Options.h
+@@ -305,6 +305,9 @@
+   /// \brief Remove shared cache flags.
+   bool removeSharedCacheFlag = false;
+ 
++  /// \brief Write TBD v5 JSON pretty-printed rather than compact.
++  bool noCompact = false;
++
+ 
+   /// \brief Specify the output file type.
+   llvm::MachO::FileType fileType = llvm::MachO::FileType::TBD_V5;
+--- a/include/tapi/Driver/TAPIOptions.td
++++ b/include/tapi/Driver/TAPIOptions.td
+@@ -248,6 +248,10 @@
+ def noUUIDs : Flag<["--"], "no-uuids">, Flags<[StubOption,InstallAPIOption]>,
+   HelpText<"Don't record the UUIDs from the library in the text-based stub file">;
+ 
++def noCompact : Flag<["--"], "no-compact">,
++  Flags<[ArchiveOption,StubOption,InstallAPIOption]>,
++  HelpText<"Do not compact information in output file format">;
++
+ def filetype : Joined<["--"], "filetype=">, Flags<[StubOption,InstallAPIOption]>,
+   HelpText<"Specify the output file type (tbd-v1, tbd-v2, tbd-v3, or tbd-v4)">;
+ 
+--- a/lib/APIVerifier/TAPIStructuralEquivalence.cpp
++++ b/lib/APIVerifier/TAPIStructuralEquivalence.cpp
+@@ -148,7 +148,6 @@
+     return IsStructurallyEquivalent(Context, NNS1->getAsNamespaceAlias(),
+                                     NNS2->getAsNamespaceAlias());
+   case NestedNameSpecifier::TypeSpec:
+-  case NestedNameSpecifier::TypeSpecWithTemplate:
+     return Context.checkStructurallyEquivalent(QualType(NNS1->getAsType(), 0),
+                                                QualType(NNS2->getAsType(), 0));
+   case NestedNameSpecifier::Global:
+@@ -204,11 +203,12 @@
+     if (!IsStructurallyEquivalent(Context, DN1->getQualifier(),
+                                   DN2->getQualifier()))
+       return false;
+-    if (DN1->isIdentifier() && DN2->isIdentifier())
+-      return IsStructurallyEquivalent(DN1->getIdentifier(),
+-                                      DN2->getIdentifier());
+-    else if (DN1->isOverloadedOperator() && DN2->isOverloadedOperator())
+-      return DN1->getOperator() == DN2->getOperator();
++    const IdentifierInfo *II1 = DN1->getName().getIdentifier(),
++                         *II2 = DN2->getName().getIdentifier();
++    if (II1 && II2)
++      return IsStructurallyEquivalent(II1, II2);
++    if (!II1 && !II2)
++      return DN1->getName().getOperator() == DN2->getName().getOperator();
+     return false;
+   }
+ 
+@@ -470,9 +470,18 @@
+     if (!Context.checkStructurallyEquivalent(MemPtr1->getPointeeType(),
+                                              MemPtr2->getPointeeType()))
+       return false;
+-    if (!Context.checkStructurallyEquivalent(QualType(MemPtr1->getClass(), 0),
+-                                             QualType(MemPtr2->getClass(), 0)))
++    if (!IsStructurallyEquivalent(Context, MemPtr1->getQualifier(),
++                                  MemPtr2->getQualifier()))
+       return false;
++    const CXXRecordDecl *D1 = MemPtr1->getMostRecentCXXRecordDecl(),
++                        *D2 = MemPtr2->getMostRecentCXXRecordDecl();
++    if (D1 == D2)
++      break;
++    if (!D1 || !D2 ||
++        !Context.checkStructurallyEquivalent(
++            QualType(D1->getTypeForDecl(), 0),
++            QualType(D2->getTypeForDecl(), 0)))
++      return false;
+     break;
+   }
+ 
+@@ -839,11 +848,17 @@
+         cast<DependentTemplateSpecializationType>(T1);
+     const DependentTemplateSpecializationType *Spec2 =
+         cast<DependentTemplateSpecializationType>(T2);
+-    if (!IsStructurallyEquivalent(Context, Spec1->getQualifier(),
+-                                  Spec2->getQualifier()))
++    const DependentTemplateStorage &Name1 = Spec1->getDependentTemplateName(),
++                                   &Name2 = Spec2->getDependentTemplateName();
++    if (!IsStructurallyEquivalent(Context, Name1.getQualifier(),
++                                  Name2.getQualifier()))
+       return false;
+-    if (!IsStructurallyEquivalent(Spec1->getIdentifier(),
+-                                  Spec2->getIdentifier()))
++    const IdentifierInfo *II1 = Name1.getName().getIdentifier(),
++                         *II2 = Name2.getName().getIdentifier();
++    if (!II1 || !II2) {
++      if (Name1.getName().getOperator() != Name2.getName().getOperator())
++        return false;
++    } else if (!IsStructurallyEquivalent(II1, II2))
+       return false;
+     if (Spec1->template_arguments().size() != Spec2->template_arguments().size())
+       return false;
+@@ -1001,8 +1016,8 @@
+ 
+   if (Field1->isBitField()) {
+     // Make sure that the bit-fields are the same length.
+-    unsigned Bits1 = Field1->getBitWidthValue(Context.FromCtx);
+-    unsigned Bits2 = Field2->getBitWidthValue(Context.ToCtx);
++    unsigned Bits1 = Field1->getBitWidthValue();
++    unsigned Bits2 = Field2->getBitWidthValue();
+ 
+     if (Bits1 != Bits2) {
+       Context.Diag1(Field1->getLocation(),
+--- a/lib/Core/InterfaceFileManager.cpp
++++ b/lib/Core/InterfaceFileManager.cpp
+@@ -23,13 +23,14 @@
+ TAPI_NAMESPACE_INTERNAL_BEGIN
+ 
+ InterfaceFileManager::InterfaceFileManager(FileManager &fm,
+-                                           const bool isVolatile)
++                                           const bool isVolatile,
++                                           const bool compact)
+     : _fm(fm), isVolatile(isVolatile) {
+   _registry.addYAMLReaders();
+   _registry.addYAMLWriters();
+   _registry.addBinaryReaders();
+   _registry.addJSONReaders();
+-  _registry.addJSONWriters();
++  _registry.addJSONWriters(compact);
+ }
+ 
+ Expected<APIs &> InterfaceFileManager::readFile(const std::string &path,
+--- a/lib/Core/JSONReaderWriter.cpp
++++ b/lib/Core/JSONReaderWriter.cpp
+@@ -59,7 +59,7 @@
+   if (file == nullptr)
+     return errorCodeToError(std::make_error_code(std::errc::invalid_argument));
+ 
+-  return TextAPIWriter::writeToStream(os, *file, fileType, /*Compact=*/false);
++  return TextAPIWriter::writeToStream(os, *file, fileType, compact);
+ }
+ 
+ TAPI_NAMESPACE_INTERNAL_END
+--- a/lib/Core/Registry.cpp
++++ b/lib/Core/Registry.cpp
+@@ -243,8 +243,8 @@
+   add(std::unique_ptr<Reader>(new JSONReader));
+ }
+ 
+-void Registry::addJSONWriters() {
+-  add(std::unique_ptr<Writer>(new JSONWriter));
++void Registry::addJSONWriters(bool compact) {
++  add(std::unique_ptr<Writer>(new JSONWriter(compact)));
+ }
+ 
+ void Registry::addDiagnosticReader() {
+--- a/lib/Diagnostics/Diagnostics.cpp
++++ b/lib/Diagnostics/Diagnostics.cpp
+@@ -75,19 +75,19 @@
+ }
+ 
+ DiagnosticsEngine::DiagnosticsEngine(raw_ostream &errorStream) {
+-  diagOpts = createDiagnosticsEngineOpts();
++  diagOpts.reset(createDiagnosticsEngineOpts());
+   diag = new clang::DiagnosticsEngine(
+-      new clang::DiagnosticIDs(), diagOpts.get(),
+-      new clang::TextDiagnosticPrinter(errorStream, diagOpts.get()));
++      new clang::DiagnosticIDs(), *diagOpts,
++      new clang::TextDiagnosticPrinter(errorStream, *diagOpts));
+   assert(std::is_sorted(std::begin(diagInfo), std::end(diagInfo)) &&
+          "diagnostic array should be sorted");
+   diag->getClient()->BeginSourceFile(langOpts);
+ }
+ 
+ DiagnosticsEngine::DiagnosticsEngine(clang::DiagnosticConsumer *client) {
+-  diagOpts = createDiagnosticsEngineOpts();
++  diagOpts.reset(createDiagnosticsEngineOpts());
+   diag = new clang::DiagnosticsEngine(new clang::DiagnosticIDs(),
+-                                      diagOpts.get(), client);
++                                      *diagOpts, client);
+   assert(std::is_sorted(std::begin(diagInfo), std::end(diagInfo)) &&
+          "diagnostic array should be sorted");
+   diag->getClient()->BeginSourceFile(langOpts);
+@@ -163,7 +163,7 @@
+ // that needs to be wrapped into a valid plist file.
+ class TapiLogDiagnosticPrinter : public clang::LogDiagnosticPrinter {
+ public:
+-  TapiLogDiagnosticPrinter(raw_ostream &os, clang::DiagnosticOptions *diags,
++  TapiLogDiagnosticPrinter(raw_ostream &os, clang::DiagnosticOptions &diags,
+                            std::unique_ptr<raw_ostream> streamOwner)
+       : clang::LogDiagnosticPrinter(os, diags, std::move(streamOwner)), os(os) {
+     // Write header for plist file.
+@@ -187,7 +187,7 @@
+ void DiagnosticsEngine::setupLogDiagnostics(
+     raw_ostream &os, std::unique_ptr<raw_ostream> streamOwner) {
+   auto logger = std::make_unique<TapiLogDiagnosticPrinter>(
+-      os, diagOpts.get(), std::move(streamOwner));
++      os, *diagOpts, std::move(streamOwner));
+   assert(diag->ownsClient());
+   diag->setClient(new clang::ChainedDiagnosticConsumer(diag->takeClient(),
+                                                        std::move(logger)));
+@@ -196,7 +196,7 @@
+ void DiagnosticsEngine::setupSerializedDiagnostics(
+     StringRef output, std::unique_ptr<raw_ostream> streamOwner) {
+   auto SerializedConsumer = clang::serialized_diags::create(
+-      output, diagOpts.get(), /*MergeChildRecords=*/false,
++      output, *diagOpts, /*MergeChildRecords=*/false,
+       std::move(streamOwner));
+   SerializedConsumer->BeginSourceFile(langOpts);
+   assert(diag->ownsClient());
+--- a/lib/Driver/ArchiveDriver.cpp
++++ b/lib/Driver/ArchiveDriver.cpp
+@@ -30,7 +30,8 @@
+ bool Driver::Archive::run(DiagnosticsEngine &diag, Options &opts) {
+   auto &fm = opts.getFileManager();
+   const InterfaceFileManager manager(fm,
+-                                     /*isVolatile=*/opts.tapiOptions.isBnI);
++                                     /*isVolatile=*/opts.tapiOptions.isBnI,
++                                     !opts.tapiOptions.noCompact);
+ 
+   // Handle input files.
+   if (opts.driverOptions.inputs.empty()) {
+@@ -70,7 +71,7 @@
+   registry.addYAMLReaders();
+   registry.addYAMLWriters();
+   registry.addJSONReaders();
+-  registry.addJSONWriters();
++  registry.addJSONWriters(!opts.tapiOptions.noCompact);
+ 
+   std::vector<std::unique_ptr<InterfaceFile>> inputs;
+   for (const auto &path : opts.driverOptions.inputs) {
+--- a/lib/Driver/DirectoryScanner.cpp
++++ b/lib/Driver/DirectoryScanner.cpp
+@@ -100,12 +100,12 @@
+   dylib.isDynamicLibrary = true;
+ 
+   if (directoryEntryPublic) {
+-    if (!scanHeaders(dylib, (*directoryEntryPublic)->getName(),
++    if (!scanHeaders(dylib, directoryEntryPublic->getName(),
+                      HeaderType::Public, directory))
+       return false;
+   }
+   if (directoryEntryPrivate) {
+-    if (!scanHeaders(dylib, (*directoryEntryPrivate)->getName(),
++    if (!scanHeaders(dylib, directoryEntryPrivate->getName(),
+                      HeaderType::Private, directory))
+       return false;
+   }
+--- a/lib/Driver/DriverOptions.cpp
++++ b/lib/Driver/DriverOptions.cpp
+@@ -14,28 +14,22 @@
+ using namespace llvm::opt;
+ using namespace tapi::internal;
+ 
+-/// Create prefix string literals used in TAPIOptions.td.
+-#define PREFIX(NAME, VALUE)                                                    \
+-  static constexpr llvm::StringLiteral NAME##_init[] = VALUE;                  \
+-  static constexpr llvm::ArrayRef<llvm::StringLiteral> NAME(                   \
+-      NAME##_init, std::size(NAME##_init) - 1);
++/// The string, prefix and prefix-union tables TableGen writes.
++#define OPTTABLE_STR_TABLE_CODE
+ #include "tapi/Driver/TAPIOptions.inc"
+-#undef PREFIX
++#undef OPTTABLE_STR_TABLE_CODE
+ 
+-static constexpr const StringLiteral prefixTable_init[] =
+-#define PREFIX_UNION(VALUES) VALUES
++#define OPTTABLE_PREFIXES_TABLE_CODE
+ #include "tapi/Driver/TAPIOptions.inc"
+-#undef PREFIX_UNION
+-    ;
+-static constexpr const ArrayRef<StringLiteral>
+-    prefixTable(prefixTable_init, std::size(prefixTable_init) - 1);
++#undef OPTTABLE_PREFIXES_TABLE_CODE
+ 
++#define OPTTABLE_PREFIXES_UNION_CODE
++#include "tapi/Driver/TAPIOptions.inc"
++#undef OPTTABLE_PREFIXES_UNION_CODE
++
+ /// Create table mapping all options defined in TAPIOptions.td.
+ static constexpr OptTable::Info infoTable[] = {
+-#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
+-               HELPTEXT, METAVAR, VALUES)                                      \
+-  {PREFIX, NAME,  HELPTEXT,    METAVAR,     OPT_##ID,  Option::KIND##Class,    \
+-   PARAM,  FLAGS, OPT_##GROUP, OPT_##ALIAS, ALIASARGS, VALUES},
++#define OPTION(...) LLVM_CONSTRUCT_OPT_INFO(__VA_ARGS__),
+ #include "tapi/Driver/TAPIOptions.inc"
+ #undef OPTION
+ };
+@@ -45,7 +39,9 @@
+ /// \brief Create OptTable class for parsing actual command line arguments.
+ class DriverOptTable : public opt::PrecomputedOptTable {
+ public:
+-  DriverOptTable() : PrecomputedOptTable(infoTable, prefixTable) {}
++  DriverOptTable()
++      : PrecomputedOptTable(OptionStrTable, OptionPrefixesTable, infoTable,
++                            OptionPrefixesUnion) {}
+ };
+ 
+ } // end anonymous namespace.
+--- a/lib/Driver/InstallAPIDriver.cpp
++++ b/lib/Driver/InstallAPIDriver.cpp
+@@ -563,7 +563,8 @@
+   const auto platforms = mapToPlatformSet(allTargets);
+ 
+   // Lookup re-exported libraries.
+-  InterfaceFileManager manager(fm, opts.tapiOptions.isBnI);
++  InterfaceFileManager manager(fm, opts.tapiOptions.isBnI,
++                               !opts.tapiOptions.noCompact);
+   PathSeq frameworkSearchPaths;
+   LibAttrs reexportedLibraries;
+   std::vector<APIs> reexportedLibraryFiles;
+@@ -788,13 +789,13 @@
+     auto bufferOr = fm.getBufferForFile(*file);
+     if (auto ec = bufferOr.getError()) {
+       diag.report(diag::err_cannot_read_file)
+-          << (*file)->getName() << ec.message();
++          << file->getName() << ec.message();
+       return false;
+     }
+     auto reader = FileListReader::get(std::move(bufferOr.get()));
+     if (!reader) {
+       diag.report(diag::err_cannot_read_file)
+-          << (*file)->getName() << toString(reader.takeError());
++          << file->getName() << toString(reader.takeError());
+       return false;
+     }
+ 
+@@ -1209,7 +1210,7 @@
+   if (opts.tapiOptions.fileType >= FileType::TBD_V5) {
+     for (const auto &[path, archs] : opts.linkerOptions.rpaths)
+       for (const auto &target : scanFile->targets(archs))
+-        scanFile->addRPath(target, path);
++        scanFile->addRPath(path, target);
+   }
+ 
+   if (swiftFile) {
+--- a/lib/Driver/Options.cpp
++++ b/lib/Driver/Options.cpp
+@@ -1290,6 +1290,9 @@
+   if (args.hasArg(OPT_removeSharedCacheFlag))
+     tapiOptions.removeSharedCacheFlag = true;
+ 
++  if (args.hasArg(OPT_noCompact))
++    tapiOptions.noCompact = true;
++
+   if (args.hasArg(OPT_noUUIDs))
+     diag.report(diag::warn_no_uuids);
+ 
+--- a/lib/Driver/SDKDBDriver.cpp
++++ b/lib/Driver/SDKDBDriver.cpp
+@@ -1116,10 +1116,10 @@
+ }
+ 
+ static bool readPartialSDKDBFile(sdkdb::Context &context, StringRef path) {
+-  auto file = context.getFileManager().getOptionalFileRef(path);
++  auto file = context.getFileManager().getFileRef(path);
+   if (!file) {
+     context.getDiag().report(diag::err_cannot_open_file)
+-        << path << file.getError().message();
++        << path << toString(file.takeError());
+     return false;
+   }
+ 
+@@ -1148,10 +1148,10 @@
+     return true;
+ 
+   // read partial sdkdb from file list.
+-  auto file = context.getFileManager().getOptionalFileRef(context.partialSDKDBFilelist);
++  auto file = context.getFileManager().getFileRef(context.partialSDKDBFilelist);
+   if (!file) {
+     context.getDiag().report(diag::err_cannot_open_file)
+-        << context.partialSDKDBFilelist << file.getError().message();
++        << context.partialSDKDBFilelist << toString(file.takeError());
+     return false;
+   }
+ 
+@@ -1224,10 +1224,11 @@
+     const bool isSwiftSDKDB = StringRef(path).ends_with(".swift.sdkdb");
+ 
+     // Read partial SDKDB output.
+-    auto file = context.getFileManager().getOptionalFileRef(path);
++    auto file = context.getFileManager().getFileRef(path);
+     if (!file) {
++      std::error_code ec = errorToErrorCode(file.takeError());
+       if (isSwiftSDKDB)
+-        return makeSwiftSDKDBError(path, file.getError());
++        return makeSwiftSDKDBError(path, ec);
+       continue;
+     }
+     auto buffer = context.getFileManager().getBufferForFile(*file);
+@@ -1343,7 +1344,7 @@
+ 
+     auto bufferOrErr = context.getFileManager().getBufferForFile(*file);
+     if (auto ec = bufferOrErr.getError()) {
+-      diag.report(diag::err_cannot_read_file) << (*file)->getName()
++      diag.report(diag::err_cannot_read_file) << file->getName()
+                                               << ec.message();
+       return false;
+     }
+@@ -1352,7 +1353,7 @@
+         ConfigurationFileReader::get((*bufferOrErr)->getMemBufferRef());
+     if (!configurationFile) {
+       diag.report(diag::err_cannot_read_file)
+-          << (*file)->getName() << toString(configurationFile.takeError());
++          << file->getName() << toString(configurationFile.takeError());
+       return false;
+     }
+ 
+--- a/lib/Driver/StubDriver.cpp
++++ b/lib/Driver/StubDriver.cpp
+@@ -39,14 +39,14 @@
+ namespace {
+ 
+ struct Context {
+-  Context(FileManager &fm, DiagnosticsEngine &diag, bool isBnI)
++  Context(FileManager &fm, DiagnosticsEngine &diag, bool isBnI, bool compact)
+       : fm(fm), diag(diag),
+-        interfaceMgr(InterfaceFileManager(fm, /*isVolatile=*/isBnI)) {
++        interfaceMgr(InterfaceFileManager(fm, /*isVolatile=*/isBnI, compact)) {
+     registry.addBinaryReaders();
+     registry.addYAMLReaders();
+     registry.addYAMLWriters();
+     registry.addJSONReaders();
+-    registry.addJSONWriters();
++    registry.addJSONWriters(compact);
+   }
+ 
+   Context(const Context &) = delete;
+@@ -229,11 +229,11 @@
+     ctx.diag.report(clang::diag::err_drv_no_such_file) << ctx.inputPath;
+     return false;
+   }
+-  auto *inputFile = *input;
++  FileEntryRef inputFile = *input;
+   auto bufferOrErr = ctx.fm.getBufferForFile(inputFile);
+   if (auto ec = bufferOrErr.getError()) {
+     ctx.diag.report(diag::err_cannot_read_file)
+-        << inputFile->getName() << ec.message();
++        << inputFile.getName() << ec.message();
+     return false;
+   }
+ 
+@@ -242,7 +242,7 @@
+                             FileType::MachO_DynamicLibrary |
+                                 FileType::MachO_DynamicLibrary_Stub |
+                                 Registry::getTextFileType())) {
+-    ctx.diag.report(diag::err_not_a_dylib) << inputFile->getName();
++    ctx.diag.report(diag::err_not_a_dylib) << inputFile.getName();
+     return false;
+   }
+ 
+@@ -278,7 +278,7 @@
+   }
+ 
+   if (ctx.deleteInputFile) {
+-    inputFile->closeFile();
++    inputFile.getFileEntry().closeFile();
+     if (auto ec = sys::fs::remove(ctx.inputPath)) {
+       ctx.diag.report(diag::err) << ctx.inputPath << ec.message();
+       return false;
+@@ -581,7 +581,8 @@
+   }
+ 
+   // FIME: Copy everything for now.
+-  Context ctx(opts.getFileManager(), diag, opts.tapiOptions.isBnI);
++  Context ctx(opts.getFileManager(), diag, opts.tapiOptions.isBnI,
++              !opts.tapiOptions.noCompact);
+   ctx.deleteInputFile = opts.tapiOptions.deleteInputFile;
+   ctx.inlinePrivateFrameworks = opts.tapiOptions.inlinePrivateFrameworks;
+   ctx.deletePrivateFrameworks = opts.tapiOptions.deletePrivateFrameworks;
+--- a/lib/Frontend/APIVisitor.cpp
++++ b/lib/Frontend/APIVisitor.cpp
+@@ -310,10 +310,10 @@
+   raw_svector_ostream nameStream(name);
+   const auto *method = cast<CXXMethodDecl>(decl.getDecl());
+   if (const auto *dtor = dyn_cast<CXXDestructorDecl>(method))
+-    mc->mangleCXXDtorThunk(dtor, decl.getDtorType(), thunk.This, 
++    mc->mangleCXXDtorThunk(dtor, decl.getDtorType(), thunk, elideOverrideInfo,
+                            nameStream);
+   else
+-    mc->mangleThunk(method, thunk, nameStream);
++    mc->mangleThunk(method, thunk, elideOverrideInfo, nameStream);
+ 
+   return getBackendMangledName(name);
+ }
+@@ -362,7 +362,7 @@
+   // Check to see if spelling location is in AvailabilityInternalPrivate.h.
+   auto &sm = context.getSourceManager();
+   auto spellingLoc = sm.getSpellingLoc(loc);
+-  auto *file = sm.getFileEntryForID(sm.getFileID(spellingLoc));
++  auto file = sm.getFileEntryRefForID(sm.getFileID(spellingLoc));
+   if (file && file->getName().ends_with("AvailabilityInternalPrivate.h")) 
+     return true;
+   // If not, search up the macro expansion see if the previous expansion
+@@ -915,7 +915,7 @@
+     // Except in the case of destructors.
+     // Only ignore pure virtuals after checking if the member
+     // function was a destructor.
+-    if (method->isPure())
++    if (method->isPureVirtual())
+       continue;
+ 
+     auto name = getMangledName(method);
+--- a/lib/Frontend/Frontend.cpp
++++ b/lib/Frontend/Frontend.cpp
+@@ -98,9 +98,9 @@
+ 
+ static const opt::ArgStringList *
+ getCC1Arguments(clang::DiagnosticsEngine *diagnostics,
+-                driver::Compilation *compilation) {
++                clang::driver::Compilation *compilation) {
+   const auto &jobs = compilation->getJobs();
+-  if (jobs.size() != 1 || !isa<driver::Command>(*jobs.begin())) {
++  if (jobs.size() != 1 || !isa<clang::driver::Command>(*jobs.begin())) {
+     SmallString<256> error_msg;
+     raw_svector_ostream error_stream(error_msg);
+     jobs.Print(error_stream, "; ", true);
+@@ -110,7 +110,7 @@
+   }
+ 
+   // The one job we find should be to invoke clang again.
+-  const auto &cmd = cast<driver::Command>(*jobs.begin());
++  const auto &cmd = cast<clang::driver::Command>(*jobs.begin());
+   if (StringRef(cmd.getCreator().getName()) != "clang") {
+     diagnostics->Report(clang::diag::err_fe_expected_clang_command);
+     return nullptr;
+@@ -133,8 +133,8 @@
+                      std::unique_ptr<llvm::MemoryBuffer> input) {
+   context.compiler = std::make_unique<CompilerInstance>();
+   IntrusiveRefCntPtr<DiagnosticIDs> diagID(new DiagnosticIDs());
+-  IntrusiveRefCntPtr<DiagnosticOptions> diagOpts(new DiagnosticOptions());
+-  const llvm::opt::OptTable &opts = driver::getDriverOptTable();
++  auto diagOpts = std::make_unique<DiagnosticOptions>();
++  const llvm::opt::OptTable &opts = clang::driver::getDriverOptTable();
+ 
+   std::vector<const char *> argv;
+   for (const std::string &str : options)
+@@ -144,8 +144,8 @@
+   llvm::opt::InputArgList parsedArgs = opts.ParseArgs(
+       ArrayRef<const char *>(argv).slice(1), MissingArgIndex, MissingArgCount);
+   ParseDiagnosticArgs(*diagOpts, parsedArgs);
+-  TextDiagnosticPrinter diagnosticPrinter(llvm::errs(), &*diagOpts);
+-  clang::DiagnosticsEngine diagnosticsEngine(diagID, &*diagOpts,
++  TextDiagnosticPrinter diagnosticPrinter(llvm::errs(), *diagOpts);
++  clang::DiagnosticsEngine diagnosticsEngine(diagID, *diagOpts,
+                                              &diagnosticPrinter, false);
+ 
+   const std::unique_ptr<clang::driver::Driver> driver(new clang::driver::Driver(
+@@ -177,7 +177,8 @@
+         input->getBufferIdentifier(), input.release());
+ 
+   // Create a compiler instance to handle the actual work.
+-  context.compiler->setInvocation(std::move(invocation));
++  context.compiler = std::make_unique<CompilerInstance>(
++      std::shared_ptr<CompilerInvocation>(std::move(invocation)));
+   context.compiler->setFileManager(&*(context.fileManager));
+   auto action = std::make_unique<APIVisitorAction>(context);
+ 
+@@ -186,7 +187,7 @@
+   if (!context.compiler->hasDiagnostics())
+     return false;
+ 
+-  context.compiler->createSourceManager(*(context.fileManager));
++  context.compiler->createSourceManager();
+   context.verifier->setSourceManager(context.compiler->getSourceManager());
+ 
+   return context.compiler->ExecuteAction(*action);
+--- a/lib/SDKDB/BitcodeReader.cpp
++++ b/lib/SDKDB/BitcodeReader.cpp
+@@ -64,9 +64,9 @@
+ 
+   // NOLINTNEXTLINE
+   internal_key_type ReadKey(const uint8_t *data, offset_type KeyLen) {
+-    auto offset = support::endian::readNext<uint32_t, support::little,
++    auto offset = support::endian::readNext<uint32_t, llvm::endianness::little,
+                                             support::unaligned>(data);
+-    auto size = support::endian::readNext<uint16_t, support::little,
++    auto size = support::endian::readNext<uint16_t, llvm::endianness::little,
+                                           support::unaligned>(data);
+     auto name = StringRef(identifiers + offset, size);
+     return name;
+@@ -75,7 +75,7 @@
+   // NOLINTNEXTLINE
+   static data_type ReadData(internal_key_type key, const uint8_t *data,
+                             offset_type length) {
+-    return support::endian::readNext<data_type, support::little,
++    return support::endian::readNext<data_type, llvm::endianness::little,
+                                      support::unaligned>(data);
+   }
+ };
+--- a/lib/SDKDB/BitcodeWriter.cpp
++++ b/lib/SDKDB/BitcodeWriter.cpp
+@@ -65,7 +65,7 @@
+   void EmitKey(raw_ostream &out, key_type_ref key, offset_type len) {
+     unsigned keyOffset = stringTable.getOffset(key);
+     unsigned keySize = key.size();
+-    support::endian::Writer writer(out, support::little);
++    support::endian::Writer writer(out, llvm::endianness::little);
+     writer.write<uint32_t>(keyOffset);
+     writer.write<uint16_t>(keySize);
+   }
+@@ -73,7 +73,7 @@
+   // NOLINTNEXTLINE
+   void EmitData(raw_ostream &out, key_type_ref key, data_type_ref data,
+                 offset_type len) {
+-    support::endian::Writer writer(out, support::little);
++    support::endian::Writer writer(out, llvm::endianness::little);
+     writer.write<data_type>(data);
+   }
+ };
+@@ -1145,7 +1145,7 @@
+ 
+     raw_svector_ostream blobStream(hashTableBlob);
+     // Make sure that no bucket is at offset 0
+-    support::endian::write<uint64_t>(blobStream, 0, support::little);
++    support::endian::write<uint64_t>(blobStream, 0, llvm::endianness::little);
+     auto tableOffset = generator.Emit(blobStream, info);
+     scratchRecord = {library_table_block::LOOKUP_TABLE, tableOffset};
+     writer->EmitRecordWithBlob(LIBRARY_TABLE_LOOKUP_TABLE_ABBREV, scratchRecord,

@@ -358,3 +358,6 @@
 [submodule "src/extras/bas"]
 	path = src/extras/bas
 	url = https://github.com/xnuports/bas
+[submodule "src/extras/byacc"]
+	path = src/extras/byacc
+	url = https://github.com/ThomasDickey/byacc-snapshots.git

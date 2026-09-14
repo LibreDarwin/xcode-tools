@@ -379,3 +379,6 @@
 [submodule "src/swiftlang-llvm/swift-certificates"]
 	path = src/swiftlang-llvm/swift-certificates
 	url = https://github.com/apple/swift-certificates
+[submodule "src/swiftlang-llvm/swift-tools-protocols"]
+	path = src/swiftlang-llvm/swift-tools-protocols
+	url = https://github.com/swiftlang/swift-tools-protocols

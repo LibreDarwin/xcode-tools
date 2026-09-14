@@ -367,3 +367,6 @@
 [submodule "src/swiftlang-llvm/swift-build"]
 	path = src/swiftlang-llvm/swift-build
 	url = https://github.com/swiftlang/swift-build
+[submodule "src/swiftlang-llvm/swift-system"]
+	path = src/swiftlang-llvm/swift-system
+	url = https://github.com/apple/swift-system

@@ -121,7 +121,7 @@ P_MAKE_ARGS=	clang llvm-nm llvm-otool llvm-objdump llvm-size \
 		llvm-profdata libtapi \
 		lld llvm-ar llvm-objcopy llvm-readobj \
 		llvm-cxxfilt llvm-readtapi llvm-cas clang-cas-test tapi \
-		clang-format clangd \
+		clang-format clangd cache-build-session \
 		llvm-libraries clang-libraries \
 		LTO libclang libIndexStore.dylib \
 		runtimes
@@ -190,6 +190,7 @@ P_PROGS=	bin/clang \
 		bin/clang-cas-test \
 		bin/clang-format \
 		bin/clangd \
+		bin/cache-build-session \
 		bin/tapi
 
 # tapi is built from a patched copy rather than the submodule: it calls

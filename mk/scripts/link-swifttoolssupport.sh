@@ -23,7 +23,8 @@ SDK=$2
 B=$3
 
 cd "$B"
-"$SWIFTC" -sdk "$SDK" -emit-library -o libSwiftToolsSupport.dylib \
+"$SWIFTC" -sdk "$SDK" -target arm64-apple-macosx14.0 \
+    -emit-library -o libSwiftToolsSupport.dylib \
     -module-name SwiftToolsSupport \
     -Xlinker -all_load \
     lib/libTSCBasic.a lib/libTSCUtility.a lib/libTSCLibc.a lib/libTSCclibc.a \

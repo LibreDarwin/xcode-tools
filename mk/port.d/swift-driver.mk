@@ -35,10 +35,19 @@ P_CONFIGURE_ARGS=	${SWIFT_CMAKE_ARGS} \
 	-DTSC_DIR=${TOP}/build/ports/swift-tools-support-core/build/tsc-dylib \
 	-DLLBuild_DIR=${TOP}/build/ports/llbuild/build/fw
 P_MAKE_ARGS=	swift-driver swift-help
+#
+# libSwiftDriver.dylib is the driver as a library, for SwiftBuild and
+# swift-package to load: SwiftDriver and SwiftOptions, re-exporting
+# libSwiftToolsSupport.dylib.  CMake builds it only as static libraries,
+# so mk/scripts/link-swiftdriver.sh links the dylib from them.
 P_POST_BUILD=	sh ${TOP}/mk/scripts/set-rpaths.sh bin/swift-driver \
 		    /usr/lib/swift @executable_path/../lib \
 		    @executable_path/../../../../../SharedFrameworks \
 		    @executable_path/../lib/swift/pm/llbuild && \
 		sh ${TOP}/mk/scripts/set-rpaths.sh bin/swift-help \
-		    /usr/lib/swift @executable_path/../lib
+		    /usr/lib/swift @executable_path/../lib && \
+		sh ${TOP}/mk/scripts/link-swiftdriver.sh ${SWIFTC_BIN} ${MACOS_SDK} \
+		    ${P_OBJDIR} \
+		    ${TOP}/build/ports/swift-tools-support-core/build/libSwiftToolsSupport.dylib
 P_PROGS=	bin/swift-driver bin/swift-help
+P_LIBS=		libSwiftDriver.dylib

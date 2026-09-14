@@ -376,3 +376,6 @@
 [submodule "src/swiftlang-llvm/swift-asn1"]
 	path = src/swiftlang-llvm/swift-asn1
 	url = https://github.com/apple/swift-asn1
+[submodule "src/swiftlang-llvm/swift-certificates"]
+	path = src/swiftlang-llvm/swift-certificates
+	url = https://github.com/apple/swift-certificates

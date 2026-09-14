@@ -34,6 +34,11 @@ TMP="${OUTPUT}.symbols.$$"
 TMP_X86="${OUTPUT}.x86.$$"
 SDK_INC="$3"
 
+# The scratch files sit beside the stub, in the SDK, so they go however
+# the script ends: set -e stops it at the first failing command, and the
+# leftovers from runs that did were being shipped in usr/lib.
+trap 'rm -f "$TMP" "$TMP_X86"' EXIT
+
 command -v dyld_info >/dev/null 2>&1 || {
 	echo "$0: dyld_info is required to read the shared cache" >&2
 	exit 1

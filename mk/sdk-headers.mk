@@ -713,6 +713,10 @@ SDK_LIB=	${SDK_ROOT}/usr/lib
 sdk-stubs:
 	@${ECHO} "sdk: generating library stubs"
 	@mkdir -p ${SDK_LIB}
+	# make-tbd.sh's scratch files, left beside the stubs by runs that
+	# stopped early before it cleaned up after itself however it ended.
+	@rm -f ${SDK_LIB}/*.tbd.symbols.* ${SDK_LIB}/*.tbd.x86.* \
+	    ${SDK_LIB}/system/*.tbd.symbols.* ${SDK_LIB}/system/*.tbd.x86.*
 	@${TOP}/mk/scripts/make-tbd.sh /usr/lib/libSystem.B.dylib \
 	    ${SDK_LIB}/libSystem.B.tbd \
 	    ${SDK_INC} || true
@@ -737,13 +741,14 @@ sdk-stubs:
 	@[ -f ${SDK_LIB}/libiconv.2.tbd ] && \
 	    ln -sfn libiconv.2.tbd ${SDK_LIB}/libiconv.tbd || true
 	# The compatibility names.  On this system pthread, m, dl, c, info,
-	# rpcsvc, poll and proc are all inside libSystem, and Apple ship a
-	# stub for each whose install name is libSystem's -- so -lpthread
-	# and -lm resolve and link the one library.  Without them any
-	# configure script that checks for them decides the system has no
-	# libz, or no libxml2, or whatever it was really testing.
-.for l in libpthread libm libdl libc libinfo librpcsvc libpoll libproc
-	@ln -sfn libSystem.B.tbd ${SDK_LIB}/${l}.tbd
+	# rpcsvc, poll, proc, dbm, mx and gcc_s are all inside libSystem, and
+	# Apple's SDK links each name to libSystem.tbd -- so -lpthread and -lm
+	# resolve and link the one library.  Without them any configure
+	# script that checks for them decides the system has no libz, or no
+	# libxml2, or whatever it was really testing.
+.for l in libpthread libm libdl libc libinfo librpcsvc libpoll libproc \
+	  libdbm libmx libmx.A libgcc_s.1
+	@ln -sfn libSystem.tbd ${SDK_LIB}/${l}.tbd
 .endfor
 	# These three are their own dylibs rather than aliases.
 .for l v in libresolv .9 libcharset .1
@@ -752,12 +757,19 @@ sdk-stubs:
 	@[ -f ${SDK_LIB}/${l}${v}.tbd ] && \
 	    ln -sfn ${l}${v}.tbd ${SDK_LIB}/${l}.tbd || true
 .endfor
-	# libutil's dylib has no dot before its version, and Apple's stub
-	# keeps that spelling.
-	@${TOP}/mk/scripts/make-tbd.sh /usr/lib/libutil1.0.dylib \
-	    ${SDK_LIB}/libutil1.0.tbd 2>/dev/null || true
-	@[ -f ${SDK_LIB}/libutil1.0.tbd ] && \
-	    ln -sfn libutil1.0.tbd ${SDK_LIB}/libutil.tbd || true
+	# libutil and libsqlite3 go the other way round from the libraries
+	# below: in Apple's SDK the stub is the unversioned name, with the
+	# unversioned install name, and the versioned name is the link --
+	# libutil1.0.tbd, with no dot, and libsqlite3.0.tbd.  Both names are
+	# removed first, because the one that is now the stub used to be the
+	# link, and writing through it would overwrite the other.
+.for l v in libutil 1.0 libsqlite3 .0
+	@rm -f ${SDK_LIB}/${l}.tbd ${SDK_LIB}/${l}${v}.tbd
+	@${TOP}/mk/scripts/make-tbd.sh /usr/lib/${l}.dylib \
+	    ${SDK_LIB}/${l}.tbd 2>/dev/null || true
+	@[ -f ${SDK_LIB}/${l}.tbd ] && \
+	    ln -sfn ${l}.tbd ${SDK_LIB}/${l}${v}.tbd || true
+.endfor
 
 	# usr/lib/system.  Apple's SDK carries a stub for each of libSystem's
 	# sub-libraries and this one carried none, which is not merely a
@@ -770,7 +782,7 @@ sdk-stubs:
 .for l in libcache libcommonCrypto libcompiler_rt libcopyfile \
 	  libcorecrypto libcorecrypto_noasm libcorecrypto_trace libdispatch \
 	  libdyld libkeymgr libkxld liblaunch \
-	  libmacho libmathCommon libmathCommon.A libquarantine \
+	  libmacho libquarantine \
 	  libremovefile libsystem_asl libsystem_blocks libsystem_c \
 	  libsystem_collections libsystem_configuration libsystem_containermanager libsystem_coreservices \
 	  libsystem_darwin libsystem_darwindirectory libsystem_dnssd libsystem_eligibility \
@@ -782,12 +794,17 @@ sdk-stubs:
 	@${TOP}/mk/scripts/make-tbd.sh /usr/lib/system/${l}.dylib \
 	    ${SDK_LIB}/system/${l}.tbd 2>/dev/null || true
 .endfor
+	# libmathCommon is not a stub of its own in Apple's SDK but a link to
+	# libSystem.tbd, under both its names.
+.for l in libmathCommon libmathCommon.A
+	@rm -f ${SDK_LIB}/system/${l}.tbd
+	@ln -sfn ../libSystem.tbd ${SDK_LIB}/system/${l}.tbd
+.endfor
 
 	# and the rest, each its own dylib rather than part of libSystem.
 .for l v in libz 1 libcurl 4 libedit 3 libexpat 1 libbz2 1.0 \
 	     libxml2 2 libxslt 1 libexslt 0 liblzma 5 \
-	     libncurses 5.4 libform 5.4 libmenu 5.4 libpanel 5.4 \
-	     libsqlite3 0
+	     libncurses 5.4 libform 5.4 libmenu 5.4 libpanel 5.4
 	@${TOP}/mk/scripts/make-tbd.sh /usr/lib/${l}.${v}.dylib \
 	    ${SDK_LIB}/${l}.${v}.tbd 2>/dev/null || true
 	@[ -f ${SDK_LIB}/${l}.${v}.tbd ] && \

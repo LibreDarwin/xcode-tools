@@ -364,3 +364,6 @@
 [submodule "src/swiftlang-llvm/swift-package-manager"]
 	path = src/swiftlang-llvm/swift-package-manager
 	url = https://github.com/swiftlang/swift-package-manager
+[submodule "src/swiftlang-llvm/swift-build"]
+	path = src/swiftlang-llvm/swift-build
+	url = https://github.com/swiftlang/swift-build

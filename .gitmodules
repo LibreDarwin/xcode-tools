@@ -370,3 +370,6 @@
 [submodule "src/swiftlang-llvm/swift-system"]
 	path = src/swiftlang-llvm/swift-system
 	url = https://github.com/apple/swift-system
+[submodule "src/swiftlang-llvm/swift-collections"]
+	path = src/swiftlang-llvm/swift-collections
+	url = https://github.com/apple/swift-collections

@@ -119,6 +119,11 @@ PROGS+=	openxc-tools/c99 c99 ${XCTOOLCHAIN}/usr/bin
 # mk/tool.d/bm4.mk.
 PROGS+=	../lib/bm4 bm4 ${XCTOOLCHAIN}/usr/bin
 
+# m4 and yacc, which pick between gm4 and bm4 and between bison and byacc
+# as Xcode's do.  Apple publish neither; see common/wrapper.c.
+PROGS+=	openxc-tools/m4 m4 ${XCTOOLCHAIN}/usr/bin
+PROGS+=	openxc-tools/yacc yacc ${XCTOOLCHAIN}/usr/bin
+
 # mig and migcom, from bootstrap_cmds.  Most of an SDK's mach/ headers
 # are mig's output rather than files anyone wrote, so these come before
 # anything that wants them.  migcom goes in libexec because that is

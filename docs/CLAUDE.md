@@ -1645,19 +1645,18 @@ What each needed, all of it non-obvious:
     property, so the check is answered in the negative rather than the flag
     fought.
   - **The port builds named targets, not `all`.** With tapi in the tree, `all`
-    also builds the tapi CLI tool and its APIVerifier/Frontend libraries, which
-    carry drift beyond what the scripts and patches cover (clang's
-    `DiagnosticOptions` is no longer reference-counted). `libtapi` itself — the
-    only part ld64 needs — builds clean, so `P_MAKE_ARGS` names exactly what we
-    ship.
+    also builds tapi's own test tools, which nothing ships; `P_MAKE_ARGS` names
+    exactly what we ship, `libtapi` and the `tapi` command among them.
 
-- **gm4, bison** — not enabled. Both restore their missing gnulib templates
-  fine (`mk/scripts/gnulib-restore-templates.sh` recreates `alloca_.h` and
-  `getopt_.h`, which Apple's drops ship the *outputs* of but not the inputs),
-  and then their vendored gnulib — two decades older than the SDK — substitutes
-  its own `<stdint.h>`/`<inttypes.h>` and the system `_inttypes.h` stops seeing
-  `intmax_t`. Fixing that means forcing configure to accept the system headers
-  or refreshing the vendored gnulib. Their fragments are in place.
+- **gm4, bison** — GNU M4 1.4.6 and Bison 2.3, built with Apple's own
+  `gm4.xcodeproj` and `bison.xcodeproj` from a copy (xcodebuild writes a
+  workspace into the project). Configure is the wrong road: the drops ship the
+  `config.h` Apple build with, while configure makes the vendored gnulib — two
+  decades older than the SDK — replace `<stdint.h>`/`<inttypes.h>`, after which
+  the SDK's `_inttypes.h` stops seeing `intmax_t`. bison finds its skeletons in
+  `../share/bison` and its m4 as the `gm4` beside it (Apple's
+  `relative_path.diff`, already in the source), so the port installs the same
+  skeleton files Apple's `install-files.sh` does.
 
 Apple also ships `lex`, `yacc` and `m4` in the toolchain, but as distinct
 binaries rather than links to flex/bison/gm4, so `P_LINKS` does not cover them.
@@ -1722,8 +1721,6 @@ build. Each is here with what stands in the way.
   itself is built; see the llvm port above.)
 - **`m4`/`bm4`, `yacc`/`byacc`** — Apple's projects are bm4-8 and byacc-4,
   and neither is in the Developer Tools release.
-- **`gm4`, `bison`** — carried, and blocked by their bundled gnulib; see
-  `mk/ports.mk`.
 - **`swift-plugin-server`** — not a target this Swift configuration
   generates. `swift-package`, `swift-build`, `sourcekit-lsp`, `swift-format`
   and `docc` need SwiftPM, SwiftBuild and repositories this tree does not

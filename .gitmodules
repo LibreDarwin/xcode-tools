@@ -403,3 +403,6 @@
 [submodule "swift-markdown"]
 	path = src/swiftlang-llvm/swift-markdown
 	url = https://github.com/swiftlang/swift-markdown.git
+[submodule "indexstore-db"]
+	path = src/swiftlang-llvm/indexstore-db
+	url = https://github.com/swiftlang/indexstore-db.git

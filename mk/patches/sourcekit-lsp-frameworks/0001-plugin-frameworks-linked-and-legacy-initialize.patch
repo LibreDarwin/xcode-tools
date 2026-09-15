@@ -1,0 +1,649 @@
+diff --git a/Package.swift b/Package.swift
+index cc91632..37d86e5 100644
+--- a/Package.swift
++++ b/Package.swift
+@@ -22,7 +22,7 @@ var products: [Product] = [
+   .library(name: "_SourceKitLSP", targets: ["SourceKitLSP"]),
+   .library(name: "InProcessClient", targets: ["InProcessClient"]),
+   .library(name: "SwiftSourceKitPlugin", type: .dynamic, targets: ["SwiftSourceKitPlugin"]),
+-  .library(name: "SwiftSourceKitClientPlugin", type: .dynamic, targets: ["SwiftSourceKitClientPlugin"]),
++  .library(name: "SwiftSourceKitClientPlugin", type: .dynamic, targets: ["SwiftSourceKitClientPlugin_XcodeDefault"]),
+ ]
+ 
+ var targets: [Target] = [
+@@ -134,7 +134,8 @@ var targets: [Target] = [
+     name: "CompletionScoringForPlugin",
+     dependencies: ["CCompletionScoring"],
+     exclude: ["CMakeLists.txt"],
+-    swiftSettings: globalSwiftSettings
++    // In Xcode's SwiftSourceKitPlugin.framework the scoring types are the framework's own.
++    swiftSettings: globalSwiftSettings + [.unsafeFlags(["-module-abi-name", "SwiftSourceKitPlugin"])]
+   ),
+ 
+   .testTarget(
+@@ -561,13 +562,14 @@ var targets: [Target] = [
+   // MARK: SwiftSourceKitClientPlugin
+ 
+   .target(
+-    name: "SwiftSourceKitClientPlugin",
++    name: "SwiftSourceKitClientPlugin_XcodeDefault",
+     dependencies: [
+       "Csourcekitd",
+       "SourceKitDForPlugin",
+       "SwiftExtensionsForPlugin",
+       "SwiftSourceKitPluginCommon",
+     ],
++    path: "Sources/SwiftSourceKitClientPlugin",
+     exclude: ["CMakeLists.txt"],
+     swiftSettings: globalSwiftSettings + [
+       .unsafeFlags([
+@@ -579,6 +581,12 @@ var targets: [Target] = [
+     linkerSettings: sourcekitLSPLinkSettings
+   ),
+ 
++  // The sourcekitd function tables, filled from sourcekitdInProc's exports, for the service plugin framework.
++  .target(
++    name: "SwiftSourceKitPluginLinked",
++    dependencies: []
++  ),
++
+   // MARK: SwiftSourceKitPluginCommon
+ 
+   .target(
+@@ -610,6 +618,7 @@ var targets: [Target] = [
+       "SKUtilitiesForPlugin",
+       "SourceKitDForPlugin",
+       "SwiftSourceKitPluginCommon",
++      "SwiftSourceKitPluginLinked",
+       "SwiftExtensionsForPlugin",
+       .product(name: "_SKLoggingForPlugin", package: "swift-tools-protocols"),
+       .product(name: "_ToolsProtocolsSwiftExtensionsForPlugin", package: "swift-tools-protocols"),
+diff --git a/Sources/SourceKitD/SourceKitD.swift b/Sources/SourceKitD/SourceKitD.swift
+index 56785f2..81e8813 100644
+--- a/Sources/SourceKitD/SourceKitD.swift
++++ b/Sources/SourceKitD/SourceKitD.swift
+@@ -193,6 +193,24 @@ package actor SourceKitD {
+     )
+   }
+ 
++  /// Create a `SourceKitD` instance from function tables that are already filled, for a plugin that links
++  /// sourcekitdInProc rather than loading it. Nothing is loaded, so there is nothing to close; the functions the plugin
++  /// does not call may be null.
++  package init(
++    linkedAt path: URL,
++    api: sourcekitd_api_functions_t,
++    ideApi: sourcekitd_ide_api_functions_t,
++    pluginApi: sourcekitd_plugin_api_functions_t,
++    servicePluginApi: sourcekitd_service_plugin_api_functions_t
++  ) {
++    self.path = path
++    self.dylib = .rtldDefault
++    self.api = api
++    self.ideApiResult = .success(ideApi)
++    self.pluginApiResult = .success(pluginApi)
++    self.servicePluginApiResult = .success(servicePluginApi)
++  }
++
+   /// Create a `SourceKitD` instance from an existing `DLHandle`. `SourceKitD` takes over ownership of the `DLHandler`
+   /// and will close it when the `SourceKitD` instance gets deinitialized or if the initializer throws.
+   package init(dlhandle: DLHandle, path: URL, pluginPaths: PluginPaths?, initialize: Bool) throws {
+diff --git a/Sources/SwiftSourceKitClientPlugin/ClientPlugin.swift b/Sources/SwiftSourceKitClientPlugin/ClientPlugin.swift
+index 2a85884..59efa77 100644
+--- a/Sources/SwiftSourceKitClientPlugin/ClientPlugin.swift
++++ b/Sources/SwiftSourceKitClientPlugin/ClientPlugin.swift
+@@ -16,35 +16,45 @@ import SourceKitD
+ import SwiftExtensions
+ import SwiftSourceKitPluginCommon
+ 
+-/// Legacy plugin initialization logic in which sourcekitd does not inform the plugin about the sourcekitd path it was
+-/// loaded from.
+-@_cdecl("sourcekitd_plugin_initialize")
+-public func sourcekitd_plugin_initialize(_ params: sourcekitd_api_plugin_initialize_params_t) {
+-  fatalError("sourcekitd_plugin_initialize has been removed in favor of sourcekitd_plugin_initialize_2")
+-}
++/// The sourcekitd this plugin was loaded beside: the `sourcekitd.framework` next to the framework containing the
++/// plugin, or, if there is none, whatever the process has already loaded.
++private func sourcekitdRelativeToPlugin() -> SourceKitD {
++  var dlInfo = Dl_info()
++  dladdr(#dsohandle, &dlInfo)
++  let path = String(cString: dlInfo.dli_fname)
++  var url = URL(fileURLWithPath: path, isDirectory: false)
++  while url.pathExtension != "framework" && url.lastPathComponent != "/" {
++    url.deleteLastPathComponent()
++  }
++  url =
++    url
++    .deletingLastPathComponent()
++    .appendingPathComponent("sourcekitd.framework")
++    .appendingPathComponent("sourcekitd")
+ 
+-@_cdecl("sourcekitd_plugin_initialize_2")
+-public func sourcekitd_plugin_initialize_2(
+-  _ params: sourcekitd_api_plugin_initialize_params_t,
+-  _ sourcekitdPath: UnsafePointer<CChar>
+-) {
+-  let pluginPath = URL(fileURLWithPath: String(cString: sourcekitdPath))
++  let dlhandle: DLHandle
++  do {
++    dlhandle = try dlopen(url.path, mode: [.local, .first])
++  } catch {
++    FileHandle.standardError.write(
++      "failed to find sourcekitd.framework relative to \(path); falling back to RTLD_DEFAULT\n".data(using: .utf8)!
++    )
++    dlhandle = .rtldDefault
++  }
+ 
+-  if SourceKitD.isPluginLoaded {
+-    // When `DYLD_(FRAMEWORK|LIBRARY)_PATH` is set, `dlopen` will first check if the basename of the provided path is
+-    // within any of its search paths. Thus it's possible that only a single library is loaded for each toolchain,
+-    // rather than a separate like we expect. The paths should be equal in this case, since the client plugin is loaded
+-    // based on the path of `sourcekitd.framework` (and we should only have one for the same reason). Allow this case
+-    // and just avoid re-initializing.
+-    precondition(SourceKitD.forPlugin.path == pluginPath)
+-    return
++  do {
++    return try SourceKitD(dlhandle: dlhandle, path: url, pluginPaths: nil, initialize: false)
++  } catch {
++    fatalError("Failed to load sourcekitd: \(error)")
+   }
++}
+ 
+-  SourceKitD.forPlugin = try! SourceKitD(
+-    dylib: pluginPath,
+-    pluginPaths: nil,
+-    initialize: false
+-  )
++/// Plugin initialization in which the plugin finds sourcekitd itself, relative to where it was loaded from.
++@_cdecl("sourcekitd_plugin_initialize")
++public func sourcekitd_plugin_initialize(_ params: sourcekitd_api_plugin_initialize_params_t) {
++  if !SourceKitD.isPluginLoaded {
++    SourceKitD.forPlugin = sourcekitdRelativeToPlugin()
++  }
+   let sourcekitd = SourceKitD.forPlugin
+ 
+   let customBufferStart = sourcekitd.pluginApi.plugin_initialize_custom_buffer_start(params)
+diff --git a/Sources/SwiftSourceKitPlugin/Plugin.swift b/Sources/SwiftSourceKitPlugin/Plugin.swift
+index c03a1d9..80ec0a2 100644
+--- a/Sources/SwiftSourceKitPlugin/Plugin.swift
++++ b/Sources/SwiftSourceKitPlugin/Plugin.swift
+@@ -16,6 +16,7 @@ import Foundation
+ import SourceKitD
+ import SwiftExtensions
+ import SwiftSourceKitPluginCommon
++import SwiftSourceKitPluginLinked
+ import ToolsProtocolsSwiftExtensions
+ 
+ private func useNewAPI(for dict: SKDRequestDictionaryReader) -> Bool {
+@@ -158,13 +159,6 @@ final class RequestHandler: Sendable {
+   }
+ }
+ 
+-/// Legacy plugin initialization logic in which sourcekitd does not inform the plugin about the sourcekitd path it was
+-/// loaded from.
+-@_cdecl("sourcekitd_plugin_initialize")
+-public func sourcekitd_plugin_initialize(_ params: sourcekitd_api_plugin_initialize_params_t) {
+-  fatalError("sourcekitd_plugin_initialize has been removed in favor of sourcekitd_plugin_initialize_2")
+-}
+-
+ #if canImport(Darwin)
+ private extension SourceKitD {
+   /// When a plugin is initialized, it gets passed the library it was loaded from to `sourcekitd_plugin_initialize_2`.
+@@ -205,32 +199,28 @@ private extension SourceKitD {
+ }
+ #endif
+ 
+-@_cdecl("sourcekitd_plugin_initialize_2")
+-public func sourcekitd_plugin_initialize_2(
+-  _ params: sourcekitd_api_plugin_initialize_params_t,
+-  _ parentLibraryPath: UnsafePointer<CChar>
+-) {
++/// Plugin initialization for the framework build, which links sourcekitdInProc: the functions are already bound, so
++/// nothing needs to know where sourcekitd was loaded from.
++@_cdecl("sourcekitd_plugin_initialize")
++public func sourcekitd_plugin_initialize(_ params: sourcekitd_api_plugin_initialize_params_t) {
+   LoggingScope.configureDefaultLoggingSubsystem("org.swift.sourcekit-lsp.plugin")
+-  let parentLibraryPath = String(cString: parentLibraryPath)
+-  #if canImport(Darwin)
+-  if parentLibraryPath == "SOURCEKIT_LSP_PLUGIN_PARENT_LIBRARY_RTLD_DEFAULT" {
+-    SourceKitD.forPlugin = try! SourceKitD(
+-      dlhandle: .rtldDefault,
+-      path: URL(string: "rtld-default://")!,
+-      pluginPaths: nil,
+-      initialize: false
+-    )
+-  } else {
+-    SourceKitD.forPlugin = try! SourceKitD.inProcLibrary(relativeTo: URL(fileURLWithPath: parentLibraryPath))
+-  }
+-  #else
+-  // On other platforms, sourcekitd is always in process, so we can load it straight away.
+-  SourceKitD.forPlugin = try! SourceKitD(
+-    dylib: URL(fileURLWithPath: parentLibraryPath),
+-    pluginPaths: nil,
+-    initialize: false
++  let tables = UnsafeMutableRawPointer.allocate(
++    byteCount: MemoryLayout<sourcekitd_api_functions_t>.stride + MemoryLayout<sourcekitd_ide_api_functions_t>.stride
++      + MemoryLayout<sourcekitd_plugin_api_functions_t>.stride
++      + MemoryLayout<sourcekitd_service_plugin_api_functions_t>.stride,
++    alignment: MemoryLayout<UnsafeRawPointer>.alignment
++  )
++  let ideOffset = MemoryLayout<sourcekitd_api_functions_t>.stride
++  let pluginOffset = ideOffset + MemoryLayout<sourcekitd_ide_api_functions_t>.stride
++  let serviceOffset = pluginOffset + MemoryLayout<sourcekitd_plugin_api_functions_t>.stride
++  swiftsourcekitplugin_linked_functions(tables, tables + ideOffset, tables + pluginOffset, tables + serviceOffset)
++  SourceKitD.forPlugin = SourceKitD(
++    linkedAt: URL(string: "linked://sourcekitdInProc")!,
++    api: tables.load(as: sourcekitd_api_functions_t.self),
++    ideApi: tables.load(fromByteOffset: ideOffset, as: sourcekitd_ide_api_functions_t.self),
++    pluginApi: tables.load(fromByteOffset: pluginOffset, as: sourcekitd_plugin_api_functions_t.self),
++    servicePluginApi: tables.load(fromByteOffset: serviceOffset, as: sourcekitd_service_plugin_api_functions_t.self)
+   )
+-  #endif
+   let sourcekitd = SourceKitD.forPlugin
+ 
+   let completionResultsBufferKind = sourcekitd.pluginApi.plugin_initialize_custom_buffer_start(params)
+diff --git a/Sources/SwiftSourceKitPluginLinked/SwiftSourceKitPluginLinked.c b/Sources/SwiftSourceKitPluginLinked/SwiftSourceKitPluginLinked.c
+new file mode 100644
+index 0000000..d0d247e
+--- /dev/null
++++ b/Sources/SwiftSourceKitPluginLinked/SwiftSourceKitPluginLinked.c
+@@ -0,0 +1,375 @@
++//===----------------------------------------------------------------------===//
++//
++// Generated from SourceKitD/sourcekitd_functions.swift for every function in
++// the four tables, all of which sourcekitdInProc exports.
++//
++//===----------------------------------------------------------------------===//
++
++#include "SwiftSourceKitPluginLinked.h"
++#include "../Csourcekitd/include/sourcekitd_functions.h"
++#include "../Csourcekitd/include/CodeCompletionSwiftInterop.h"
++#include "../Csourcekitd/include/plugin.h"
++#include <string.h>
++
++extern void sourcekitd_cancel_request(void);
++extern void sourcekitd_initialize(void);
++extern void sourcekitd_plugin_initialize_custom_buffer_start(void);
++extern void sourcekitd_plugin_initialize_get_swift_ide_inspection_instance(void);
++extern void sourcekitd_plugin_initialize_is_client_only(void);
++extern void sourcekitd_plugin_initialize_register_cancellable_request_handler(void);
++extern void sourcekitd_plugin_initialize_register_cancellation_handler(void);
++extern void sourcekitd_plugin_initialize_register_custom_buffer(void);
++extern void sourcekitd_plugin_initialize_uid_get_from_cstr(void);
++extern void sourcekitd_plugin_initialize_uid_get_string_ptr(void);
++extern void sourcekitd_register_plugin_path(void);
++extern void sourcekitd_request_array_create(void);
++extern void sourcekitd_request_array_get_bool(void);
++extern void sourcekitd_request_array_get_count(void);
++extern void sourcekitd_request_array_get_int64(void);
++extern void sourcekitd_request_array_get_string(void);
++extern void sourcekitd_request_array_get_uid(void);
++extern void sourcekitd_request_array_get_value(void);
++extern void sourcekitd_request_array_set_int64(void);
++extern void sourcekitd_request_array_set_string(void);
++extern void sourcekitd_request_array_set_stringbuf(void);
++extern void sourcekitd_request_array_set_uid(void);
++extern void sourcekitd_request_array_set_value(void);
++extern void sourcekitd_request_bool_get_value(void);
++extern void sourcekitd_request_create_from_yaml(void);
++extern void sourcekitd_request_description_copy(void);
++extern void sourcekitd_request_description_dump(void);
++extern void sourcekitd_request_dictionary_create(void);
++extern void sourcekitd_request_dictionary_get_bool(void);
++extern void sourcekitd_request_dictionary_get_int64(void);
++extern void sourcekitd_request_dictionary_get_string(void);
++extern void sourcekitd_request_dictionary_get_uid(void);
++extern void sourcekitd_request_dictionary_get_value(void);
++extern void sourcekitd_request_dictionary_set_int64(void);
++extern void sourcekitd_request_dictionary_set_string(void);
++extern void sourcekitd_request_dictionary_set_stringbuf(void);
++extern void sourcekitd_request_dictionary_set_uid(void);
++extern void sourcekitd_request_dictionary_set_value(void);
++extern void sourcekitd_request_get_type(void);
++extern void sourcekitd_request_int64_create(void);
++extern void sourcekitd_request_int64_get_value(void);
++extern void sourcekitd_request_release(void);
++extern void sourcekitd_request_retain(void);
++extern void sourcekitd_request_string_create(void);
++extern void sourcekitd_request_string_get_length(void);
++extern void sourcekitd_request_string_get_ptr(void);
++extern void sourcekitd_request_uid_create(void);
++extern void sourcekitd_request_uid_get_value(void);
++extern void sourcekitd_response_array_create(void);
++extern void sourcekitd_response_array_set_double(void);
++extern void sourcekitd_response_array_set_int64(void);
++extern void sourcekitd_response_array_set_string(void);
++extern void sourcekitd_response_array_set_stringbuf(void);
++extern void sourcekitd_response_array_set_uid(void);
++extern void sourcekitd_response_array_set_value(void);
++extern void sourcekitd_response_description_copy(void);
++extern void sourcekitd_response_description_dump(void);
++extern void sourcekitd_response_description_dump_filedesc(void);
++extern void sourcekitd_response_dictionary_create(void);
++extern void sourcekitd_response_dictionary_set_bool(void);
++extern void sourcekitd_response_dictionary_set_custom_buffer(void);
++extern void sourcekitd_response_dictionary_set_double(void);
++extern void sourcekitd_response_dictionary_set_int64(void);
++extern void sourcekitd_response_dictionary_set_string(void);
++extern void sourcekitd_response_dictionary_set_stringbuf(void);
++extern void sourcekitd_response_dictionary_set_uid(void);
++extern void sourcekitd_response_dictionary_set_value(void);
++extern void sourcekitd_response_dispose(void);
++extern void sourcekitd_response_error_create(void);
++extern void sourcekitd_response_error_get_description(void);
++extern void sourcekitd_response_error_get_kind(void);
++extern void sourcekitd_response_get_value(void);
++extern void sourcekitd_response_is_error(void);
++extern void sourcekitd_response_retain(void);
++extern void sourcekitd_send_request(void);
++extern void sourcekitd_send_request_sync(void);
++extern void sourcekitd_set_notification_handler(void);
++extern void sourcekitd_set_uid_handlers(void);
++extern void sourcekitd_shutdown(void);
++extern void sourcekitd_uid_get_from_buf(void);
++extern void sourcekitd_uid_get_from_cstr(void);
++extern void sourcekitd_uid_get_length(void);
++extern void sourcekitd_uid_get_string_ptr(void);
++extern void sourcekitd_variant_array_get_bool(void);
++extern void sourcekitd_variant_array_get_count(void);
++extern void sourcekitd_variant_array_get_int64(void);
++extern void sourcekitd_variant_array_get_string(void);
++extern void sourcekitd_variant_array_get_uid(void);
++extern void sourcekitd_variant_array_get_value(void);
++extern void sourcekitd_variant_bool_get_value(void);
++extern void sourcekitd_variant_data_get_ptr(void);
++extern void sourcekitd_variant_data_get_size(void);
++extern void sourcekitd_variant_description_copy(void);
++extern void sourcekitd_variant_description_dump(void);
++extern void sourcekitd_variant_description_dump_filedesc(void);
++extern void sourcekitd_variant_dictionary_get_bool(void);
++extern void sourcekitd_variant_dictionary_get_int64(void);
++extern void sourcekitd_variant_dictionary_get_string(void);
++extern void sourcekitd_variant_dictionary_get_uid(void);
++extern void sourcekitd_variant_dictionary_get_value(void);
++extern void sourcekitd_variant_double_get_value(void);
++extern void sourcekitd_variant_functions_create(void);
++extern void sourcekitd_variant_functions_set_array_apply(void);
++extern void sourcekitd_variant_functions_set_array_get_bool(void);
++extern void sourcekitd_variant_functions_set_array_get_count(void);
++extern void sourcekitd_variant_functions_set_array_get_double(void);
++extern void sourcekitd_variant_functions_set_array_get_int64(void);
++extern void sourcekitd_variant_functions_set_array_get_string(void);
++extern void sourcekitd_variant_functions_set_array_get_uid(void);
++extern void sourcekitd_variant_functions_set_array_get_value(void);
++extern void sourcekitd_variant_functions_set_bool_get_value(void);
++extern void sourcekitd_variant_functions_set_data_get_ptr(void);
++extern void sourcekitd_variant_functions_set_data_get_size(void);
++extern void sourcekitd_variant_functions_set_dictionary_apply(void);
++extern void sourcekitd_variant_functions_set_dictionary_get_bool(void);
++extern void sourcekitd_variant_functions_set_dictionary_get_double(void);
++extern void sourcekitd_variant_functions_set_dictionary_get_int64(void);
++extern void sourcekitd_variant_functions_set_dictionary_get_string(void);
++extern void sourcekitd_variant_functions_set_dictionary_get_uid(void);
++extern void sourcekitd_variant_functions_set_dictionary_get_value(void);
++extern void sourcekitd_variant_functions_set_double_get_value(void);
++extern void sourcekitd_variant_functions_set_get_type(void);
++extern void sourcekitd_variant_functions_set_int64_get_value(void);
++extern void sourcekitd_variant_functions_set_string_get_length(void);
++extern void sourcekitd_variant_functions_set_string_get_ptr(void);
++extern void sourcekitd_variant_functions_set_uid_get_value(void);
++extern void sourcekitd_variant_get_type(void);
++extern void sourcekitd_variant_int64_get_value(void);
++extern void sourcekitd_variant_string_get_length(void);
++extern void sourcekitd_variant_string_get_ptr(void);
++extern void sourcekitd_variant_uid_get_value(void);
++extern void swiftide_cancel_request(void);
++extern void swiftide_complete_cancellable(void);
++extern void swiftide_completion_item_description_copy(void);
++extern void swiftide_completion_item_get_associated_kind(void);
++extern void swiftide_completion_item_get_associated_usrs(void);
++extern void swiftide_completion_item_get_diagnostic(void);
++extern void swiftide_completion_item_get_doc_brief(void);
++extern void swiftide_completion_item_get_doc_full_as_xml(void);
++extern void swiftide_completion_item_get_doc_raw(void);
++extern void swiftide_completion_item_get_flair(void);
++extern void swiftide_completion_item_get_kind(void);
++extern void swiftide_completion_item_get_label(void);
++extern void swiftide_completion_item_get_module_name(void);
++extern void swiftide_completion_item_get_num_bytes_to_erase(void);
++extern void swiftide_completion_item_get_semantic_context(void);
++extern void swiftide_completion_item_get_source_text(void);
++extern void swiftide_completion_item_get_type_name(void);
++extern void swiftide_completion_item_get_type_relation(void);
++extern void swiftide_completion_item_has_diagnostic(void);
++extern void swiftide_completion_item_import_depth(void);
++extern void swiftide_completion_item_is_not_recommended(void);
++extern void swiftide_completion_item_is_system(void);
++extern void swiftide_completion_item_not_recommended_reason(void);
++extern void swiftide_completion_request_create(void);
++extern void swiftide_completion_request_dispose(void);
++extern void swiftide_completion_request_set_add_call_with_no_default_args(void);
++extern void swiftide_completion_request_set_add_inits_to_top_level(void);
++extern void swiftide_completion_request_set_annotate_result(void);
++extern void swiftide_completion_request_set_include_objectliterals(void);
++extern void swiftide_completion_result_description_copy(void);
++extern void swiftide_completion_result_dispose(void);
++extern void swiftide_completion_result_foreach_baseexpr_typename(void);
++extern void swiftide_completion_result_get_completion_at_index(void);
++extern void swiftide_completion_result_get_completions(void);
++extern void swiftide_completion_result_get_error_description(void);
++extern void swiftide_completion_result_get_kind(void);
++extern void swiftide_completion_result_is_cancelled(void);
++extern void swiftide_completion_result_is_error(void);
++extern void swiftide_completion_result_is_reusing_astcontext(void);
++extern void swiftide_connection_create_with_inspection_instance(void);
++extern void swiftide_connection_dispose(void);
++extern void swiftide_connection_mark_cached_compiler_instance_should_be_invalidated(void);
++extern void swiftide_fuzzy_match_pattern_create(void);
++extern void swiftide_fuzzy_match_pattern_dispose(void);
++extern void swiftide_fuzzy_match_pattern_matches_candidate(void);
++extern void swiftide_set_file_contents(void);
++
++void swiftsourcekitplugin_linked_functions(void *apiPtr, void *idePtr, void *pluginPtr, void *servicePtr) {
++  sourcekitd_api_functions_t *api = apiPtr;
++  sourcekitd_ide_api_functions_t *ide = idePtr;
++  sourcekitd_plugin_api_functions_t *plugin = pluginPtr;
++  sourcekitd_service_plugin_api_functions_t *service = servicePtr;
++
++  api->initialize = (__typeof__(api->initialize))sourcekitd_initialize;
++  api->shutdown = (__typeof__(api->shutdown))sourcekitd_shutdown;
++  api->register_plugin_path = (__typeof__(api->register_plugin_path))sourcekitd_register_plugin_path;
++  api->uid_get_from_cstr = (__typeof__(api->uid_get_from_cstr))sourcekitd_uid_get_from_cstr;
++  api->uid_get_from_buf = (__typeof__(api->uid_get_from_buf))sourcekitd_uid_get_from_buf;
++  api->uid_get_length = (__typeof__(api->uid_get_length))sourcekitd_uid_get_length;
++  api->uid_get_string_ptr = (__typeof__(api->uid_get_string_ptr))sourcekitd_uid_get_string_ptr;
++  api->request_retain = (__typeof__(api->request_retain))sourcekitd_request_retain;
++  api->request_release = (__typeof__(api->request_release))sourcekitd_request_release;
++  api->request_dictionary_create = (__typeof__(api->request_dictionary_create))sourcekitd_request_dictionary_create;
++  api->request_dictionary_set_value = (__typeof__(api->request_dictionary_set_value))sourcekitd_request_dictionary_set_value;
++  api->request_dictionary_set_string = (__typeof__(api->request_dictionary_set_string))sourcekitd_request_dictionary_set_string;
++  api->request_dictionary_set_stringbuf = (__typeof__(api->request_dictionary_set_stringbuf))sourcekitd_request_dictionary_set_stringbuf;
++  api->request_dictionary_set_int64 = (__typeof__(api->request_dictionary_set_int64))sourcekitd_request_dictionary_set_int64;
++  api->request_dictionary_set_uid = (__typeof__(api->request_dictionary_set_uid))sourcekitd_request_dictionary_set_uid;
++  api->request_array_create = (__typeof__(api->request_array_create))sourcekitd_request_array_create;
++  api->request_array_set_value = (__typeof__(api->request_array_set_value))sourcekitd_request_array_set_value;
++  api->request_array_set_string = (__typeof__(api->request_array_set_string))sourcekitd_request_array_set_string;
++  api->request_array_set_stringbuf = (__typeof__(api->request_array_set_stringbuf))sourcekitd_request_array_set_stringbuf;
++  api->request_array_set_int64 = (__typeof__(api->request_array_set_int64))sourcekitd_request_array_set_int64;
++  api->request_array_set_uid = (__typeof__(api->request_array_set_uid))sourcekitd_request_array_set_uid;
++  api->request_int64_create = (__typeof__(api->request_int64_create))sourcekitd_request_int64_create;
++  api->request_string_create = (__typeof__(api->request_string_create))sourcekitd_request_string_create;
++  api->request_uid_create = (__typeof__(api->request_uid_create))sourcekitd_request_uid_create;
++  api->request_create_from_yaml = (__typeof__(api->request_create_from_yaml))sourcekitd_request_create_from_yaml;
++  api->request_description_dump = (__typeof__(api->request_description_dump))sourcekitd_request_description_dump;
++  api->request_description_copy = (__typeof__(api->request_description_copy))sourcekitd_request_description_copy;
++  api->response_dispose = (__typeof__(api->response_dispose))sourcekitd_response_dispose;
++  api->response_is_error = (__typeof__(api->response_is_error))sourcekitd_response_is_error;
++  api->response_error_get_kind = (__typeof__(api->response_error_get_kind))sourcekitd_response_error_get_kind;
++  api->response_error_get_description = (__typeof__(api->response_error_get_description))sourcekitd_response_error_get_description;
++  api->response_get_value = (__typeof__(api->response_get_value))sourcekitd_response_get_value;
++  api->variant_get_type = (__typeof__(api->variant_get_type))sourcekitd_variant_get_type;
++  api->variant_dictionary_get_value = (__typeof__(api->variant_dictionary_get_value))sourcekitd_variant_dictionary_get_value;
++  api->variant_dictionary_get_string = (__typeof__(api->variant_dictionary_get_string))sourcekitd_variant_dictionary_get_string;
++  api->variant_dictionary_get_int64 = (__typeof__(api->variant_dictionary_get_int64))sourcekitd_variant_dictionary_get_int64;
++  api->variant_dictionary_get_bool = (__typeof__(api->variant_dictionary_get_bool))sourcekitd_variant_dictionary_get_bool;
++  api->variant_dictionary_get_uid = (__typeof__(api->variant_dictionary_get_uid))sourcekitd_variant_dictionary_get_uid;
++  api->variant_array_get_count = (__typeof__(api->variant_array_get_count))sourcekitd_variant_array_get_count;
++  api->variant_array_get_value = (__typeof__(api->variant_array_get_value))sourcekitd_variant_array_get_value;
++  api->variant_array_get_string = (__typeof__(api->variant_array_get_string))sourcekitd_variant_array_get_string;
++  api->variant_array_get_int64 = (__typeof__(api->variant_array_get_int64))sourcekitd_variant_array_get_int64;
++  api->variant_array_get_bool = (__typeof__(api->variant_array_get_bool))sourcekitd_variant_array_get_bool;
++  api->variant_array_get_uid = (__typeof__(api->variant_array_get_uid))sourcekitd_variant_array_get_uid;
++  api->variant_int64_get_value = (__typeof__(api->variant_int64_get_value))sourcekitd_variant_int64_get_value;
++  api->variant_bool_get_value = (__typeof__(api->variant_bool_get_value))sourcekitd_variant_bool_get_value;
++  api->variant_double_get_value = (__typeof__(api->variant_double_get_value))sourcekitd_variant_double_get_value;
++  api->variant_string_get_length = (__typeof__(api->variant_string_get_length))sourcekitd_variant_string_get_length;
++  api->variant_string_get_ptr = (__typeof__(api->variant_string_get_ptr))sourcekitd_variant_string_get_ptr;
++  api->variant_data_get_size = (__typeof__(api->variant_data_get_size))sourcekitd_variant_data_get_size;
++  api->variant_data_get_ptr = (__typeof__(api->variant_data_get_ptr))sourcekitd_variant_data_get_ptr;
++  api->variant_uid_get_value = (__typeof__(api->variant_uid_get_value))sourcekitd_variant_uid_get_value;
++  api->response_description_dump = (__typeof__(api->response_description_dump))sourcekitd_response_description_dump;
++  api->response_description_dump_filedesc = (__typeof__(api->response_description_dump_filedesc))sourcekitd_response_description_dump_filedesc;
++  api->response_description_copy = (__typeof__(api->response_description_copy))sourcekitd_response_description_copy;
++  api->variant_description_dump = (__typeof__(api->variant_description_dump))sourcekitd_variant_description_dump;
++  api->variant_description_dump_filedesc = (__typeof__(api->variant_description_dump_filedesc))sourcekitd_variant_description_dump_filedesc;
++  api->variant_description_copy = (__typeof__(api->variant_description_copy))sourcekitd_variant_description_copy;
++  api->send_request_sync = (__typeof__(api->send_request_sync))sourcekitd_send_request_sync;
++  api->send_request = (__typeof__(api->send_request))sourcekitd_send_request;
++  api->cancel_request = (__typeof__(api->cancel_request))sourcekitd_cancel_request;
++  api->set_notification_handler = (__typeof__(api->set_notification_handler))sourcekitd_set_notification_handler;
++  api->set_uid_handlers = (__typeof__(api->set_uid_handlers))sourcekitd_set_uid_handlers;
++  ide->connection_create_with_inspection_instance = (__typeof__(ide->connection_create_with_inspection_instance))swiftide_connection_create_with_inspection_instance;
++  ide->connection_dispose = (__typeof__(ide->connection_dispose))swiftide_connection_dispose;
++  ide->connection_mark_cached_compiler_instance_should_be_invalidated = (__typeof__(ide->connection_mark_cached_compiler_instance_should_be_invalidated))swiftide_connection_mark_cached_compiler_instance_should_be_invalidated;
++  ide->set_file_contents = (__typeof__(ide->set_file_contents))swiftide_set_file_contents;
++  ide->cancel_request = (__typeof__(ide->cancel_request))swiftide_cancel_request;
++  ide->completion_request_create = (__typeof__(ide->completion_request_create))swiftide_completion_request_create;
++  ide->completion_request_dispose = (__typeof__(ide->completion_request_dispose))swiftide_completion_request_dispose;
++  ide->completion_request_set_annotate_result = (__typeof__(ide->completion_request_set_annotate_result))swiftide_completion_request_set_annotate_result;
++  ide->completion_request_set_include_objectliterals = (__typeof__(ide->completion_request_set_include_objectliterals))swiftide_completion_request_set_include_objectliterals;
++  ide->completion_request_set_add_inits_to_top_level = (__typeof__(ide->completion_request_set_add_inits_to_top_level))swiftide_completion_request_set_add_inits_to_top_level;
++  ide->completion_request_set_add_call_with_no_default_args = (__typeof__(ide->completion_request_set_add_call_with_no_default_args))swiftide_completion_request_set_add_call_with_no_default_args;
++  ide->complete_cancellable = (__typeof__(ide->complete_cancellable))swiftide_complete_cancellable;
++  ide->completion_result_dispose = (__typeof__(ide->completion_result_dispose))swiftide_completion_result_dispose;
++  ide->completion_result_is_error = (__typeof__(ide->completion_result_is_error))swiftide_completion_result_is_error;
++  ide->completion_result_get_error_description = (__typeof__(ide->completion_result_get_error_description))swiftide_completion_result_get_error_description;
++  ide->completion_result_is_cancelled = (__typeof__(ide->completion_result_is_cancelled))swiftide_completion_result_is_cancelled;
++  ide->completion_result_description_copy = (__typeof__(ide->completion_result_description_copy))swiftide_completion_result_description_copy;
++  ide->completion_result_get_completions = (__typeof__(ide->completion_result_get_completions))swiftide_completion_result_get_completions;
++  ide->completion_result_get_completion_at_index = (__typeof__(ide->completion_result_get_completion_at_index))swiftide_completion_result_get_completion_at_index;
++  ide->completion_result_get_kind = (__typeof__(ide->completion_result_get_kind))swiftide_completion_result_get_kind;
++  ide->completion_result_foreach_baseexpr_typename = (__typeof__(ide->completion_result_foreach_baseexpr_typename))swiftide_completion_result_foreach_baseexpr_typename;
++  ide->completion_result_is_reusing_astcontext = (__typeof__(ide->completion_result_is_reusing_astcontext))swiftide_completion_result_is_reusing_astcontext;
++  ide->completion_item_description_copy = (__typeof__(ide->completion_item_description_copy))swiftide_completion_item_description_copy;
++  ide->completion_item_get_label = (__typeof__(ide->completion_item_get_label))swiftide_completion_item_get_label;
++  ide->completion_item_get_source_text = (__typeof__(ide->completion_item_get_source_text))swiftide_completion_item_get_source_text;
++  ide->completion_item_get_type_name = (__typeof__(ide->completion_item_get_type_name))swiftide_completion_item_get_type_name;
++  ide->completion_item_get_doc_brief = (__typeof__(ide->completion_item_get_doc_brief))swiftide_completion_item_get_doc_brief;
++  ide->completion_item_get_doc_full_as_xml = (__typeof__(ide->completion_item_get_doc_full_as_xml))swiftide_completion_item_get_doc_full_as_xml;
++  ide->completion_item_get_doc_raw = (__typeof__(ide->completion_item_get_doc_raw))swiftide_completion_item_get_doc_raw;
++  ide->completion_item_get_associated_usrs = (__typeof__(ide->completion_item_get_associated_usrs))swiftide_completion_item_get_associated_usrs;
++  ide->completion_item_get_kind = (__typeof__(ide->completion_item_get_kind))swiftide_completion_item_get_kind;
++  ide->completion_item_get_associated_kind = (__typeof__(ide->completion_item_get_associated_kind))swiftide_completion_item_get_associated_kind;
++  ide->completion_item_get_semantic_context = (__typeof__(ide->completion_item_get_semantic_context))swiftide_completion_item_get_semantic_context;
++  ide->completion_item_get_flair = (__typeof__(ide->completion_item_get_flair))swiftide_completion_item_get_flair;
++  ide->completion_item_is_not_recommended = (__typeof__(ide->completion_item_is_not_recommended))swiftide_completion_item_is_not_recommended;
++  ide->completion_item_not_recommended_reason = (__typeof__(ide->completion_item_not_recommended_reason))swiftide_completion_item_not_recommended_reason;
++  ide->completion_item_has_diagnostic = (__typeof__(ide->completion_item_has_diagnostic))swiftide_completion_item_has_diagnostic;
++  ide->completion_item_get_diagnostic = (__typeof__(ide->completion_item_get_diagnostic))swiftide_completion_item_get_diagnostic;
++  ide->completion_item_is_system = (__typeof__(ide->completion_item_is_system))swiftide_completion_item_is_system;
++  ide->completion_item_get_module_name = (__typeof__(ide->completion_item_get_module_name))swiftide_completion_item_get_module_name;
++  ide->completion_item_get_num_bytes_to_erase = (__typeof__(ide->completion_item_get_num_bytes_to_erase))swiftide_completion_item_get_num_bytes_to_erase;
++  ide->completion_item_get_type_relation = (__typeof__(ide->completion_item_get_type_relation))swiftide_completion_item_get_type_relation;
++  ide->completion_item_import_depth = (__typeof__(ide->completion_item_import_depth))swiftide_completion_item_import_depth;
++  ide->fuzzy_match_pattern_create = (__typeof__(ide->fuzzy_match_pattern_create))swiftide_fuzzy_match_pattern_create;
++  ide->fuzzy_match_pattern_matches_candidate = (__typeof__(ide->fuzzy_match_pattern_matches_candidate))swiftide_fuzzy_match_pattern_matches_candidate;
++  ide->fuzzy_match_pattern_dispose = (__typeof__(ide->fuzzy_match_pattern_dispose))swiftide_fuzzy_match_pattern_dispose;
++  plugin->variant_functions_create = (__typeof__(plugin->variant_functions_create))sourcekitd_variant_functions_create;
++  plugin->variant_functions_set_get_type = (__typeof__(plugin->variant_functions_set_get_type))sourcekitd_variant_functions_set_get_type;
++  plugin->variant_functions_set_array_apply = (__typeof__(plugin->variant_functions_set_array_apply))sourcekitd_variant_functions_set_array_apply;
++  plugin->variant_functions_set_array_get_bool = (__typeof__(plugin->variant_functions_set_array_get_bool))sourcekitd_variant_functions_set_array_get_bool;
++  plugin->variant_functions_set_array_get_double = (__typeof__(plugin->variant_functions_set_array_get_double))sourcekitd_variant_functions_set_array_get_double;
++  plugin->variant_functions_set_array_get_count = (__typeof__(plugin->variant_functions_set_array_get_count))sourcekitd_variant_functions_set_array_get_count;
++  plugin->variant_functions_set_array_get_int64 = (__typeof__(plugin->variant_functions_set_array_get_int64))sourcekitd_variant_functions_set_array_get_int64;
++  plugin->variant_functions_set_array_get_string = (__typeof__(plugin->variant_functions_set_array_get_string))sourcekitd_variant_functions_set_array_get_string;
++  plugin->variant_functions_set_array_get_uid = (__typeof__(plugin->variant_functions_set_array_get_uid))sourcekitd_variant_functions_set_array_get_uid;
++  plugin->variant_functions_set_array_get_value = (__typeof__(plugin->variant_functions_set_array_get_value))sourcekitd_variant_functions_set_array_get_value;
++  plugin->variant_functions_set_bool_get_value = (__typeof__(plugin->variant_functions_set_bool_get_value))sourcekitd_variant_functions_set_bool_get_value;
++  plugin->variant_functions_set_double_get_value = (__typeof__(plugin->variant_functions_set_double_get_value))sourcekitd_variant_functions_set_double_get_value;
++  plugin->variant_functions_set_dictionary_apply = (__typeof__(plugin->variant_functions_set_dictionary_apply))sourcekitd_variant_functions_set_dictionary_apply;
++  plugin->variant_functions_set_dictionary_get_bool = (__typeof__(plugin->variant_functions_set_dictionary_get_bool))sourcekitd_variant_functions_set_dictionary_get_bool;
++  plugin->variant_functions_set_dictionary_get_double = (__typeof__(plugin->variant_functions_set_dictionary_get_double))sourcekitd_variant_functions_set_dictionary_get_double;
++  plugin->variant_functions_set_dictionary_get_int64 = (__typeof__(plugin->variant_functions_set_dictionary_get_int64))sourcekitd_variant_functions_set_dictionary_get_int64;
++  plugin->variant_functions_set_dictionary_get_string = (__typeof__(plugin->variant_functions_set_dictionary_get_string))sourcekitd_variant_functions_set_dictionary_get_string;
++  plugin->variant_functions_set_dictionary_get_value = (__typeof__(plugin->variant_functions_set_dictionary_get_value))sourcekitd_variant_functions_set_dictionary_get_value;
++  plugin->variant_functions_set_dictionary_get_uid = (__typeof__(plugin->variant_functions_set_dictionary_get_uid))sourcekitd_variant_functions_set_dictionary_get_uid;
++  plugin->variant_functions_set_string_get_length = (__typeof__(plugin->variant_functions_set_string_get_length))sourcekitd_variant_functions_set_string_get_length;
++  plugin->variant_functions_set_string_get_ptr = (__typeof__(plugin->variant_functions_set_string_get_ptr))sourcekitd_variant_functions_set_string_get_ptr;
++  plugin->variant_functions_set_int64_get_value = (__typeof__(plugin->variant_functions_set_int64_get_value))sourcekitd_variant_functions_set_int64_get_value;
++  plugin->variant_functions_set_uid_get_value = (__typeof__(plugin->variant_functions_set_uid_get_value))sourcekitd_variant_functions_set_uid_get_value;
++  plugin->variant_functions_set_data_get_size = (__typeof__(plugin->variant_functions_set_data_get_size))sourcekitd_variant_functions_set_data_get_size;
++  plugin->variant_functions_set_data_get_ptr = (__typeof__(plugin->variant_functions_set_data_get_ptr))sourcekitd_variant_functions_set_data_get_ptr;
++  plugin->plugin_initialize_is_client_only = (__typeof__(plugin->plugin_initialize_is_client_only))sourcekitd_plugin_initialize_is_client_only;
++  plugin->plugin_initialize_custom_buffer_start = (__typeof__(plugin->plugin_initialize_custom_buffer_start))sourcekitd_plugin_initialize_custom_buffer_start;
++  plugin->plugin_initialize_uid_get_from_cstr = (__typeof__(plugin->plugin_initialize_uid_get_from_cstr))sourcekitd_plugin_initialize_uid_get_from_cstr;
++  plugin->plugin_initialize_uid_get_string_ptr = (__typeof__(plugin->plugin_initialize_uid_get_string_ptr))sourcekitd_plugin_initialize_uid_get_string_ptr;
++  plugin->plugin_initialize_register_custom_buffer = (__typeof__(plugin->plugin_initialize_register_custom_buffer))sourcekitd_plugin_initialize_register_custom_buffer;
++  service->plugin_initialize_register_cancellable_request_handler = (__typeof__(service->plugin_initialize_register_cancellable_request_handler))sourcekitd_plugin_initialize_register_cancellable_request_handler;
++  service->plugin_initialize_register_cancellation_handler = (__typeof__(service->plugin_initialize_register_cancellation_handler))sourcekitd_plugin_initialize_register_cancellation_handler;
++  service->plugin_initialize_get_swift_ide_inspection_instance = (__typeof__(service->plugin_initialize_get_swift_ide_inspection_instance))sourcekitd_plugin_initialize_get_swift_ide_inspection_instance;
++  service->request_get_type = (__typeof__(service->request_get_type))sourcekitd_request_get_type;
++  service->request_dictionary_get_value = (__typeof__(service->request_dictionary_get_value))sourcekitd_request_dictionary_get_value;
++  service->request_dictionary_get_string = (__typeof__(service->request_dictionary_get_string))sourcekitd_request_dictionary_get_string;
++  service->request_dictionary_get_int64 = (__typeof__(service->request_dictionary_get_int64))sourcekitd_request_dictionary_get_int64;
++  service->request_dictionary_get_bool = (__typeof__(service->request_dictionary_get_bool))sourcekitd_request_dictionary_get_bool;
++  service->request_dictionary_get_uid = (__typeof__(service->request_dictionary_get_uid))sourcekitd_request_dictionary_get_uid;
++  service->request_array_get_count = (__typeof__(service->request_array_get_count))sourcekitd_request_array_get_count;
++  service->request_array_get_value = (__typeof__(service->request_array_get_value))sourcekitd_request_array_get_value;
++  service->request_array_get_string = (__typeof__(service->request_array_get_string))sourcekitd_request_array_get_string;
++  service->request_array_get_int64 = (__typeof__(service->request_array_get_int64))sourcekitd_request_array_get_int64;
++  service->request_array_get_bool = (__typeof__(service->request_array_get_bool))sourcekitd_request_array_get_bool;
++  service->request_array_get_uid = (__typeof__(service->request_array_get_uid))sourcekitd_request_array_get_uid;
++  service->request_int64_get_value = (__typeof__(service->request_int64_get_value))sourcekitd_request_int64_get_value;
++  service->request_bool_get_value = (__typeof__(service->request_bool_get_value))sourcekitd_request_bool_get_value;
++  service->request_string_get_length = (__typeof__(service->request_string_get_length))sourcekitd_request_string_get_length;
++  service->request_string_get_ptr = (__typeof__(service->request_string_get_ptr))sourcekitd_request_string_get_ptr;
++  service->request_uid_get_value = (__typeof__(service->request_uid_get_value))sourcekitd_request_uid_get_value;
++  service->response_retain = (__typeof__(service->response_retain))sourcekitd_response_retain;
++  service->response_error_create = (__typeof__(service->response_error_create))sourcekitd_response_error_create;
++  service->response_dictionary_create = (__typeof__(service->response_dictionary_create))sourcekitd_response_dictionary_create;
++  service->response_dictionary_set_value = (__typeof__(service->response_dictionary_set_value))sourcekitd_response_dictionary_set_value;
++  service->response_dictionary_set_string = (__typeof__(service->response_dictionary_set_string))sourcekitd_response_dictionary_set_string;
++  service->response_dictionary_set_stringbuf = (__typeof__(service->response_dictionary_set_stringbuf))sourcekitd_response_dictionary_set_stringbuf;
++  service->response_dictionary_set_int64 = (__typeof__(service->response_dictionary_set_int64))sourcekitd_response_dictionary_set_int64;
++  service->response_dictionary_set_bool = (__typeof__(service->response_dictionary_set_bool))sourcekitd_response_dictionary_set_bool;
++  service->response_dictionary_set_double = (__typeof__(service->response_dictionary_set_double))sourcekitd_response_dictionary_set_double;
++  service->response_dictionary_set_uid = (__typeof__(service->response_dictionary_set_uid))sourcekitd_response_dictionary_set_uid;
++  service->response_array_create = (__typeof__(service->response_array_create))sourcekitd_response_array_create;
++  service->response_array_set_value = (__typeof__(service->response_array_set_value))sourcekitd_response_array_set_value;
++  service->response_array_set_string = (__typeof__(service->response_array_set_string))sourcekitd_response_array_set_string;
++  service->response_array_set_stringbuf = (__typeof__(service->response_array_set_stringbuf))sourcekitd_response_array_set_stringbuf;
++  service->response_array_set_int64 = (__typeof__(service->response_array_set_int64))sourcekitd_response_array_set_int64;
++  service->response_array_set_double = (__typeof__(service->response_array_set_double))sourcekitd_response_array_set_double;
++  service->response_array_set_uid = (__typeof__(service->response_array_set_uid))sourcekitd_response_array_set_uid;
++  service->response_dictionary_set_custom_buffer = (__typeof__(service->response_dictionary_set_custom_buffer))sourcekitd_response_dictionary_set_custom_buffer;
++}
+diff --git a/Sources/SwiftSourceKitPluginLinked/include/SwiftSourceKitPluginLinked.h b/Sources/SwiftSourceKitPluginLinked/include/SwiftSourceKitPluginLinked.h
+new file mode 100644
+index 0000000..4e80878
+--- /dev/null
++++ b/Sources/SwiftSourceKitPluginLinked/include/SwiftSourceKitPluginLinked.h
+@@ -0,0 +1,19 @@
++//===----------------------------------------------------------------------===//
++//
++// SwiftSourceKitPluginLinked: the sourcekitd function tables, filled from the
++// functions sourcekitdInProc exports, for the SwiftSourceKitPlugin.framework
++// build that links sourcekitdInProc rather than loading it at run time.
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef SWIFTSOURCEKITPLUGINLINKED_H
++#define SWIFTSOURCEKITPLUGINLINKED_H
++
++/// Fills the four tables -- sourcekitd_api_functions_t,
++/// sourcekitd_ide_api_functions_t, sourcekitd_plugin_api_functions_t and
++/// sourcekitd_service_plugin_api_functions_t, in that order -- with the
++/// functions sourcekitdInProc exports for them.  The tables are passed
++/// untyped so this header does not declare Csourcekitd's types a second time.
++void swiftsourcekitplugin_linked_functions(void *api, void *ide, void *plugin, void *service);
++
++#endif

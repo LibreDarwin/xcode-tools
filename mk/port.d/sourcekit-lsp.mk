@@ -15,9 +15,13 @@
 # answers hover and diagnostics and completes nothing.  sourcekit-lsp
 # looks for them in usr/lib as dylibs before it looks for frameworks, and
 # Xcode's dylibs are what these match -- two exported entry points, 6.3.0,
-# Xcode's install name and run path.  Xcode's SwiftSourceKitPlugin and
-# SwiftSourceKitClientPlugin frameworks are another build, from Xcode's own
-# SwiftSourceKitExtensions project, and are not made here.
+# Xcode's install name and run path.
+#
+# Xcode also carries the two plugins as frameworks, SwiftSourceKitPlugin and
+# SwiftSourceKitClientPlugin, which its editor loads.  Apple publish no source
+# for those -- they are an internal project's build of the same plugin code,
+# the service plugin linking sourcekitdInProc -- so they are rebuilt from a
+# patched copy of this source; see mk/scripts/build-sourcekit-plugin-frameworks.sh.
 .include "${TOP}/mk/with-swift-cmake.mk"
 
 SKLSP_PLUGIN_ARGS=	-Xlinker -exported_symbol -Xlinker _sourcekitd_plugin_initialize \
@@ -60,6 +64,15 @@ P_POST_BUILD=	strip sourcekit-lsp && \
 			install_name_tool -id ${SKLSP_LIBDIR}/lib$$p.dylib lib$$p.dylib && \
 			sh ${TOP}/mk/scripts/set-rpaths.sh lib$$p.dylib /usr/lib/swift || \
 			exit 1; \
-		done
+		done && \
+		rm -rf frameworks && \
+		sh ${TOP}/mk/scripts/build-sourcekit-plugin-frameworks.sh ${TOP} \
+		    ${P_BUILDSRC} ${P_WORKDIR} ${RELEASE}/${XCTOOLCHAIN}/usr/bin \
+		    ${MACOS_SDK} ${TOP}/build/ports/swift/build/lib frameworks \
+		    > ${P_WORKDIR}/frameworks.log 2>&1
 P_PROGS=	sourcekit-lsp
 P_LIBS=		libSwiftSourceKitPlugin.dylib libSwiftSourceKitClientPlugin.dylib
+P_RELEASE_TREES=	frameworks/SwiftSourceKitPlugin.framework \
+			${XCTOOLCHAIN}/usr/lib/SwiftSourceKitPlugin.framework \
+			frameworks/SwiftSourceKitClientPlugin.framework \
+			${XCTOOLCHAIN}/usr/lib/SwiftSourceKitClientPlugin.framework

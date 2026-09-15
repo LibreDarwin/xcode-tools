@@ -409,3 +409,6 @@
 [submodule "swift-docc-symbolkit"]
 	path = src/swiftlang-llvm/swift-docc-symbolkit
 	url = https://github.com/swiftlang/swift-docc-symbolkit.git
+[submodule "swift-lmdb"]
+	path = src/swiftlang-llvm/swift-lmdb
+	url = https://github.com/swiftlang/swift-lmdb.git

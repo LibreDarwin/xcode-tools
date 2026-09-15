@@ -18,8 +18,10 @@
 # Built against the ports before it: llbuild.framework (with
 # LLBUILD_FRAMEWORK, which is what makes SWBLLBuild import it rather than
 # llbuildSwift), libSwiftDriver.dylib weakly, the tools-protocols
-# frameworks, and swift-system, the argument parser and
-# libSwiftToolsSupport.  LLVM's headers -- the source's and the build's,
+# frameworks, and swift-system and libSwiftToolsSupport.  The argument
+# parser is the system's ArgumentParserInternal.framework, which Xcode's
+# frameworks load, built against as mk/scripts/build-argumentparserinternal.sh
+# describes.  LLVM's headers -- the source's and the build's,
 # which has llvm-config.h -- and libRemarks.dylib are what the
 # optimization-remarks support compiles against; Xcode's frameworks link
 # libRemarks weakly and Xcode ships none, so neither is installed.
@@ -38,8 +40,13 @@ SWB_REMARKS=	${SWB_PORTS}/llvm/build/lib/libRemarks.dylib
 SWB_LDFLAGS=	-headerpad_max_install_names -current_version 24900.0.3 \
 		-dead_strip_dylibs -weak_library ${SWB_REMARKS}
 
+SWB_API=	${P_WORKDIR}/argumentparserinternal
+
 P_COPY=		yes
-P_PREPARE=	for p in ${SWB_PATCHES}; do patch -s -p1 < $$p || exit 1; done
+P_PREPARE=	for p in ${SWB_PATCHES}; do patch -s -p1 < $$p || exit 1; done && \
+		sh ${TOP}/mk/scripts/build-argumentparserinternal.sh ${SWIFTC_BIN} \
+		    ${MACOS_SDK} ${TOP}/src/swiftlang-llvm/swift-argument-parser-internal \
+		    ${SWB_API}
 P_BUILDSYS=	cmake
 P_CMAKE_SRC=	.
 P_OBJDIR=	${P_WORKDIR}/build
@@ -47,7 +54,7 @@ P_NOSTAGE=	yes
 P_CONFIGURE_ARGS=	${SWIFT_CMAKE_ARGS} \
 	-DBUILD_SHARED_LIBS=YES \
 	-DSwiftBuild_USE_LLBUILD_FRAMEWORK=YES \
-	-DArgumentParser_DIR=${SWB_PORTS}/swift-argument-parser/build/cmake/modules \
+	-DArgumentParser_DIR=${SWB_API} \
 	-DLLBuild_DIR=${SWB_LLBUILD_FW} \
 	-DSwiftDriver_DIR=${SWB_PORTS}/swift-driver/build/swiftdriver-dylib \
 	-DSwiftToolsProtocols_DIR=${SWB_PORTS}/swift-tools-protocols/build/cmake/modules \
@@ -63,7 +70,7 @@ P_POST_BUILD=	sh ${TOP}/mk/scripts/assemble-swiftbuild.sh ${P_OBJDIR} \
 		    ${SWB_PORTS}/swift-driver/build/swift \
 		    ${SWB_PORTS}/swift-tools-support-core/build/swift \
 		    ${SWB_PORTS}/swift-system/build/swift \
-		    ${SWB_PORTS}/swift-argument-parser/build/swift \
+		    ${SWB_API}/modules \
 		    ${SWB_LLVM_INCLUDE:S/^-I//}
 P_PROGS=
 P_FRAMEWORKS=	fw-install/SwiftBuild.framework

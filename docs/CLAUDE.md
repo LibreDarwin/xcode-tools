@@ -1540,6 +1540,7 @@ cases and every help page match Apple's byte for byte.
 | `swift-tools-protocols` — the `LanguageServerProtocol`, `BuildServerProtocol`, `LanguageServerProtocolTransport`, `SKLogging` and `ToolsProtocolsSwiftExtensions` frameworks | 0.0.9 | exports, run paths and `version.plist` are Apple's; load order differs |
 | `swift-build` — `SwiftBuild.framework`, with the build service, its frameworks, the platform plugins and `swbuild` | swift-6.3.3 | see below |
 | `swift-package-manager` — `swift-package` and its seven links, `lib/swift/pm` | swift-6.3.3 | `swift build`/`run` yes; see below |
+| `swift-format`, `swift-docc` — `docc` and `share/docc`, `sourcekit-lsp` | swift-6.3.3 | `--help` yes; see below |
 
 `swiftc` hands every compile to a `swift-driver` beside it, and falls back
 to the deprecated C++ driver, with a warning, when there is none. The driver
@@ -1663,6 +1664,39 @@ Xcode's run paths and loads Xcode's libraries. What does not match:
 - The load commands are in another order, and the runtime libraries name
   libSystem before Foundation.
 - Ours is 43 MB to Xcode's 23 MB.
+
+`swift-format`, `docc` and `sourcekit-lsp` are built the way Apple builds
+them, with SwiftPM rather than CMake: `P_BUILDSYS=swiftpm` in
+`mk/port.mk` copies the package, links the checkouts its manifest expects
+under `SWIFTCI_USE_LOCAL_DEPS` beside the copy (`swiftpm`, `llbuild` and
+`cmark` are named differently here), and runs this tree's `swift-build`
+against Xcode's SDK for macOS 14.0, dead-stripping unused libraries. Each
+port strips the binary and leaves `/usr/lib/swift` as its only run path.
+`sourcekit-lsp` links SwiftPM, swift-docc, indexstore-db and the rest in
+statically, as Xcode's does; `docc` gets `share/docc` beside it,
+swift-docc-render-artifact's `dist` as `render/` and swift-docc's own
+`features.json`. swift-nio, swift-atomics and swift-toolchain-sqlite are
+checkouts only for these.
+
+Their manifests read `ProcessInfo.processInfo.environment`, which is also
+what made them unloadable through this tree's `xcrun` and SDK until
+Foundation's API notes and overlay interface were added (`src/puredarwin/Foundation`,
+installed by `sdk-headers.mk`): the notes give NSProcessInfo its Swift
+name and mark NSString, NSArray and NSDictionary as bridged, and the
+interface declares the bridging the system's Foundation binary exports.
+
+Against Xcode's, all three are stripped to within about a hundred symbols
+of Xcode's, have its run path and macOS 14.0, and print the same `--help`.
+What does not match:
+
+- `docc` and `sourcekit-lsp` also load CFNetwork and `libswiftSpatial`,
+  from the macOS 26.5 SDK, where Xcode's were linked against 26.4.
+- `swift-format --version` says 6.3.3, the literal in this release's
+  `PrintVersion.swift`, where Xcode's says 6.3.0.
+- `share/docc/render` is a different build of the renderer: `index.html`,
+  `index-template.html` and two of the scripts' hashed names differ.
+- `swift-format` is 9.7 MB to Xcode's 8.0 MB, `sourcekit-lsp` 40.9 MB to
+  35.5 MB; `docc` is 12.1 MB to 12.7 MB.
 
 `c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
 source for either, so both are written from what Apple's pass to the clang
@@ -1847,8 +1881,12 @@ build. Each is here with what stands in the way.
 
 - **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
   itself is built; see the llvm port above.)
-- **`sourcekit-lsp`**, **`swift-format`** and **`docc`** — not built yet;
-  they come after SwiftPM, which is.
+- **`sourcekitd.framework`**, **`sourcekitdInProc.framework`** and
+  SourceKit-LSP's two plugins, `SwiftSourceKitPlugin` and
+  `SwiftSourceKitClientPlugin` (each a dylib and a framework in Xcode's
+  `usr/lib`) — the swift port builds with `SWIFT_BUILD_SOURCEKIT=OFF`, so
+  `sourcekit-lsp` is built but has no sourcekitd to load, and serves C and
+  C++ through clangd but not Swift.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,

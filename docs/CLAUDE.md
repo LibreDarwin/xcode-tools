@@ -1698,6 +1698,36 @@ What does not match:
 - `swift-format` is 9.7 MB to Xcode's 8.0 MB, `sourcekit-lsp` 40.9 MB to
   35.5 MB; `docc` is 12.1 MB to 12.7 MB.
 
+`sourcekit-lsp` does Swift through SourceKit, which the swift port builds:
+`sourcekitd.framework` with its `SourceKitService.xpc`, and
+`sourcekitdInProc.framework`, which the service links (the port adds the
+`sourcekit-inproc` component so that it is a framework, as Xcode's is).
+`mk/scripts/stage-sourcekitd.sh` lays them out as Xcode's `usr/lib` has
+them: the service named `com.apple.SourceKitService.6.3.3.1.3_default`
+rather than the open-source `org.swift` name, the client and the service's
+bundle identifier changed together; no headers, a module map only for the
+in-process framework; Xcode's Info.plists and `version.plist`s; the system's
+libc++ and Xcode's run paths. Code completion goes through two plugins
+sourcekitd loads, `libSwiftSourceKitPlugin.dylib` and
+`libSwiftSourceKitClientPlugin.dylib`, which the sourcekit-lsp port builds
+as further products (`P_SWIFTPM_PRODUCT` takes a list) and stages in
+`usr/lib`.
+
+Against Xcode's, the two frameworks have the same files and links, and every
+plist, the service name and the module map are identical; the three SourceKit
+binaries load the same libraries with the same run paths. The plugin dylibs
+export the same two entry points under Xcode's install name, versions and run
+path. On a SwiftPM package this `sourcekit-lsp` gives the same hover and the
+same 189 completions as Xcode's. What does not match:
+
+- The swift port builds for macOS 13.0, SourceKit with it, where Xcode's
+  swift-frontend and SourceKit are 14.0.
+- The plugins are stripped of local symbols, which leaves them far fewer
+  than Xcode's (878 to 4,773 for the service plugin).
+- Staging the swift port on its own replaces `usr/lib/swift`, and with it
+  the `lib/swift/pm` the swift-package-manager port puts there; re-stage that
+  port afterwards. A full build stages them in order.
+
 `c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
 source for either, so both are written from what Apple's pass to the clang
 beside them, and match on 194 argument lists — `c89`'s FreeBSD-descended
@@ -1881,12 +1911,12 @@ build. Each is here with what stands in the way.
 
 - **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
   itself is built; see the llvm port above.)
-- **`sourcekitd.framework`**, **`sourcekitdInProc.framework`** and
-  SourceKit-LSP's two plugins, `SwiftSourceKitPlugin` and
-  `SwiftSourceKitClientPlugin` (each a dylib and a framework in Xcode's
-  `usr/lib`) — the swift port builds with `SWIFT_BUILD_SOURCEKIT=OFF`, so
-  `sourcekit-lsp` is built but has no sourcekitd to load, and serves C and
-  C++ through clangd but not Swift.
+- **`SwiftSourceKitPlugin.framework`** and
+  **`SwiftSourceKitClientPlugin.framework`** — Xcode's own build, from its
+  `SwiftSourceKitExtensions` project (version 24700), which exports the
+  completion-ranking API as well; the published source makes the plugins
+  as the dylibs beside them, which are built, and which `sourcekit-lsp`
+  looks for first.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,

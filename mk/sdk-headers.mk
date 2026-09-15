@@ -81,6 +81,8 @@ LIBDISPATCH=	${TOP}/src/apple/libdispatch
 LLVM_BUILD=	${TOP}/build/ports/llvm/build
 MSUN=		${TOP}/lib/msun
 DYLD=		${TOP}/src/apple/dyld
+AVAILABILITYVERSIONS=	${TOP}/src/apple/AvailabilityVersions
+AVAILABILITY_OBJ=	${TOP}/build/availability
 CCTOOLS=	${TOP}/src/apple/distribution-Developer_Tools/cctools
 SWIFT_LIB=	${TOP}/build/ports/swift/build/lib/swift/macosx
 SWIFT_SHIMS=	${TOP}/build/ports/swift/build/lib/swift/shims
@@ -129,6 +131,21 @@ sdk-headers:
 	@cp -f ${XNU_FAKEROOT}/usr/include/${h} ${SDK_INC}/ 2>/dev/null || true
 .endfor
 .endif
+	# AvailabilityMacros.h and AvailabilityInternalLegacy.h are Apple's
+	# generated ones, from AvailabilityVersions -- see
+	# mk/scripts/generate-availability.sh.  xnu's EXTERNAL_HEADERS copy of
+	# AvailabilityMacros.h stops at 10.12, so IOKit's HID headers, which
+	# say AVAILABLE_MAC_OS_X_VERSION_10_13_AND_LATER, did not compile;
+	# generated, both are byte for byte the ones in Xcode's SDK.  The
+	# other three are not taken from it: the published AvailabilityVersions
+	# data stops at macOS 14.3, and Availability.h, AvailabilityInternal.h
+	# and AvailabilityVersions.h generated from it would know no macOS 15
+	# or 26 at all.
+	@sh ${TOP}/mk/scripts/generate-availability.sh ${AVAILABILITYVERSIONS} \
+	    ${AVAILABILITY_OBJ}
+.for h in AvailabilityMacros.h AvailabilityInternalLegacy.h
+	@cp -f ${AVAILABILITY_OBJ}/${h} ${SDK_INC}/
+.endfor
 	# xnu's Availability headers name five platforms -- ios, macos,
 	# macosx, tvos and watchos -- and headers here annotate for more:
 	# mach-o/dyld.h says __API_UNAVAILABLE(bridgeos) and will not
@@ -1326,6 +1343,21 @@ sdk-internal: sdk-headers sdk-modulemap sdk-stubs sdk-swift sdk-overlay sdk-fram
 	# libplatform's private headers: _simple.h, os/lock_private.h and
 	# the rest, which dyld and libmalloc include by those names.
 	@cp -Rf ${LIBPLATFORM}/private/. ${INTERNAL_SDK}/usr/local/include/ 2>/dev/null || true
+	# AvailabilityVersions' private headers, where its CMakeLists installs
+	# them: mach-o/dyld_version_defines.h, which dyld_priv.h includes when
+	# it is there and libxml2 needs for dyld_fall_2022_os_versions, the
+	# dyld version maps, and the two internal Availability headers.  And
+	# dyld_priv.h itself, dyld's own, beside them in usr/local/include
+	# where Apple's internal SDK has it: the copy under usr/include is
+	# older and does not include the version defines.
+	@mkdir -p ${INTERNAL_SDK}/usr/local/include/mach-o ${INTERNAL_SDK}/usr/local/include/dyld
+	@cp -f ${AVAILABILITY_OBJ}/dyld_version_defines.h ${DYLD}/include/mach-o/dyld_priv.h \
+	    ${INTERNAL_SDK}/usr/local/include/mach-o/
+	@cp -f ${AVAILABILITY_OBJ}/VersionMap.h ${AVAILABILITY_OBJ}/for_dyld_priv.inc \
+	    ${INTERNAL_SDK}/usr/local/include/dyld/
+	@cp -f ${AVAILABILITY_OBJ}/AvailabilityInternalPrivate.h \
+	    ${AVAILABILITY_OBJ}/AvailabilityProhibitedInternal.h \
+	    ${INTERNAL_SDK}/usr/local/include/
 	# Libc's own, the LOCALHDRS and OS_LOCALHDRS of its
 	# xcodescripts/headers.sh: libc_private.h and its neighbours.
 .for h in darwin/libc_private.h darwin/libc_hooks.h gen/utmpx_thread.h \

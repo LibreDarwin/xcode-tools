@@ -415,3 +415,6 @@
 [submodule "swift-docc-render-artifact"]
 	path = src/swiftlang-llvm/swift-docc-render-artifact
 	url = https://github.com/swiftlang/swift-docc-render-artifact.git
+[submodule "swift-nio"]
+	path = src/swiftlang-llvm/swift-nio
+	url = https://github.com/apple/swift-nio.git

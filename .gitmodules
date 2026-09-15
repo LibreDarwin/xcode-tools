@@ -421,3 +421,6 @@
 [submodule "swift-atomics"]
 	path = src/swiftlang-llvm/swift-atomics
 	url = https://github.com/apple/swift-atomics.git
+[submodule "swift-toolchain-sqlite"]
+	path = src/swiftlang-llvm/swift-toolchain-sqlite
+	url = https://github.com/swiftlang/swift-toolchain-sqlite.git

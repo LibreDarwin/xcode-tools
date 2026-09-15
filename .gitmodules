@@ -388,3 +388,6 @@
 [submodule "swift-argument-parser-internal"]
 	path = src/swiftlang-llvm/swift-argument-parser-internal
 	url = https://github.com/apple/swift-argument-parser.git
+[submodule "AvailabilityVersions"]
+	path = src/apple/AvailabilityVersions
+	url = https://github.com/apple-oss-distributions/AvailabilityVersions.git

@@ -391,3 +391,6 @@
 [submodule "AvailabilityVersions"]
 	path = src/apple/AvailabilityVersions
 	url = https://github.com/apple-oss-distributions/AvailabilityVersions.git
+[submodule "sourcekit-lsp"]
+	path = src/swiftlang-llvm/sourcekit-lsp
+	url = https://github.com/swiftlang/sourcekit-lsp.git

@@ -36,14 +36,23 @@ cd "$B"
 sh "$(dirname "$0")/set-rpaths.sh" libSwiftToolsSupport.dylib \
     /usr/lib/swift @executable_path/../lib
 
+# TSCclibc is a C module SwiftPM imports and names as a link dependency;
+# its code is already in the dylib, so the target carries only the path
+# to its module map, which stays in the source tree.
+SRC=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' CMakeCache.txt)
+
 mkdir -p tsc-dylib
 cat > tsc-dylib/TSCConfig.cmake <<EOF
 if(NOT TARGET TSCBasic)
+  add_library(TSCclibc INTERFACE IMPORTED)
+  set_target_properties(TSCclibc PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${SRC}/Sources/TSCclibc/include")
   foreach(t TSCBasic TSCUtility)
     add_library(\${t} SHARED IMPORTED)
     set_target_properties(\${t} PROPERTIES
       IMPORTED_LOCATION "${B}/libSwiftToolsSupport.dylib"
-      INTERFACE_INCLUDE_DIRECTORIES "${B}/swift")
+      INTERFACE_INCLUDE_DIRECTORIES "${B}/swift"
+      INTERFACE_LINK_LIBRARIES TSCclibc)
   endforeach()
 endif()
 EOF

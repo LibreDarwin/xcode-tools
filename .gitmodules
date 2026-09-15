@@ -400,3 +400,6 @@
 [submodule "swift-docc"]
 	path = src/swiftlang-llvm/swift-docc
 	url = https://github.com/swiftlang/swift-docc.git
+[submodule "swift-markdown"]
+	path = src/swiftlang-llvm/swift-markdown
+	url = https://github.com/swiftlang/swift-markdown.git

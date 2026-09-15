@@ -394,3 +394,6 @@
 [submodule "sourcekit-lsp"]
 	path = src/swiftlang-llvm/sourcekit-lsp
 	url = https://github.com/swiftlang/sourcekit-lsp.git
+[submodule "swift-format"]
+	path = src/swiftlang-llvm/swift-format
+	url = https://github.com/swiftlang/swift-format.git

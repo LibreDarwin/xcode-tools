@@ -406,3 +406,6 @@
 [submodule "indexstore-db"]
 	path = src/swiftlang-llvm/indexstore-db
 	url = https://github.com/swiftlang/indexstore-db.git
+[submodule "swift-docc-symbolkit"]
+	path = src/swiftlang-llvm/swift-docc-symbolkit
+	url = https://github.com/swiftlang/swift-docc-symbolkit.git

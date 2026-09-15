@@ -412,3 +412,6 @@
 [submodule "swift-lmdb"]
 	path = src/swiftlang-llvm/swift-lmdb
 	url = https://github.com/swiftlang/swift-lmdb.git
+[submodule "swift-docc-render-artifact"]
+	path = src/swiftlang-llvm/swift-docc-render-artifact
+	url = https://github.com/swiftlang/swift-docc-render-artifact.git

@@ -70,7 +70,7 @@ done.
 | Where | What |
 |---|---|
 | `usr/bin` | our 19 reimplementations, plus headerdoc, pngcrush, `xml2man`, `resolveLinks`, `make`/`gnumake`, `bsdmake`, `bmake` |
-| `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools with `c++filt` and `readtapi`, `objdump`, `as`, `unwinddump`, `clang-format` with `clang-format-diff.py`, `clangd`, `cache-build-session`, `tapi`, `dsymutil`, `swiftc` with the `swift-frontend` aliases, `swift-demangle`, `swift-stdlib-tool`, `swift-plugin-server`, `swift-build-tool`, `swift-driver`, `swift-help`, `dyld_info`, `dyld_analyzer`, `c89`/`c99`, developer_cmds, `flex`/`lex`, `gperf`, `m4` with `gm4`/`bm4`, `yacc` with `bison`/`byacc`, the `*-swift-linux-musl-clang.cfg` files, and `bldd`/`llvm-cbe` |
+| `Toolchains/XcodeDefault.xctoolchain/usr/bin` | `clang`/`clang++`/`cc`/`c++`/`cpp`, `ld` (Mach-O) and `ld.lld` (ELF), the cctools set, the llvm-* tools with `c++filt` and `readtapi`, `objdump`, `as`, `unwinddump`, `clang-format` with `clang-format-diff.py`, `clangd`, `cache-build-session`, `tapi`, `dsymutil`, `swiftc` with the `swift-frontend` aliases, `swift-demangle`, `swift-stdlib-tool`, `swift-plugin-server`, `swift-build-tool`, `swift-driver`, `swift-help`, `swift-package` with `swift-build`/`swift-run`/`swift-test`/`swift-sdk`/`swift-experimental-sdk`/`swift-package-collection`/`swift-package-registry` and `lib/swift/pm`, `dyld_info`, `dyld_analyzer`, `c89`/`c99`, developer_cmds, `flex`/`lex`, `gperf`, `m4` with `gm4`/`bm4`, `yacc` with `bison`/`byacc`, the `*-swift-linux-musl-clang.cfg` files, and `bldd`/`llvm-cbe` |
 | `Toolchains/XcodeDefault.xctoolchain/usr/lib` | `libtapi.dylib`, `libSwiftToolsSupport.dylib`, `libSwiftDriver.dylib`, clang's resource directory |
 | `../SharedFrameworks` | `llbuild.framework`, `SwiftBuild.framework`, and the `LanguageServerProtocol`, `BuildServerProtocol`, `LanguageServerProtocolTransport`, `SKLogging` and `ToolsProtocolsSwiftExtensions` frameworks |
 | `usr/libexec` | `PlistBuddy` |
@@ -280,8 +280,9 @@ Two clean builds of the default set produce byte-identical binaries.
   a standard library built here. It needs three sibling checkouts (`swift-cmark`,
   `swift-syntax`, `swift-experimental-string-processing`, all at
   `swift-6.3.3-RELEASE`) and is built against this tree's own LLVM rather than
-  the second copy `build-script` would make. No swift-driver yet, so the legacy
-  driver is used; SwiftPM, Foundation and the rest of the toolchain are not built.
+  the second copy `build-script` would make. `swift-driver` and SwiftPM are
+  built, so `swift build` and `swift run` work; Foundation and the rest of the
+  toolchain are not built.
 - **Python, Git** — sources carried (CPython 3.14.6, git 2.50.1, the version Apple's Git-155 wraps), not yet ported to `mk/port.mk`.
 - **The `xc*` family** — `xccov`, `xcresulttool`, `xcsigningtool`, `xctest`,
   `xcdevice`, `xcdiagnose`. `xcstringstool` does `print` and `compile`, in both

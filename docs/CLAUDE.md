@@ -1539,6 +1539,7 @@ cases and every help page match Apple's byte for byte.
 | `swift-system`, `swift-collections`, `swift-asn1`, `swift-crypto`, `swift-certificates` | the versions SwiftPM 6.3.3 pins | nothing installed; SwiftPM links them statically |
 | `swift-tools-protocols` — the `LanguageServerProtocol`, `BuildServerProtocol`, `LanguageServerProtocolTransport`, `SKLogging` and `ToolsProtocolsSwiftExtensions` frameworks | 0.0.9 | exports, run paths and `version.plist` are Apple's; load order differs |
 | `swift-build` — `SwiftBuild.framework`, with the build service, its frameworks, the platform plugins and `swbuild` | swift-6.3.3 | see below |
+| `swift-package-manager` — `swift-package` and its seven links, `lib/swift/pm` | swift-6.3.3 | `swift build`/`run` yes; see below |
 
 `swiftc` hands every compile to a `swift-driver` beside it, and falls back
 to the deprecated C++ driver, with a warning, when there is none. The driver
@@ -1606,22 +1607,62 @@ SwiftBuild and SWBProjectModel alone get library evolution, and they get
 Xcode's ABI names, `XCBuild` and `XCBProjectModel`, which swift-package's
 references to them are mangled with. It links `llbuild.framework`,
 `libSwiftDriver.dylib` and `libRemarks.dylib` (weakly, as Xcode's do) and the
-tools-protocols frameworks.
+tools-protocols frameworks. The argument parser is not linked in: SWBUtil,
+SWBTaskExecution and SWBUniversalPlatform load the system's
+`/System/Library/PrivateFrameworks/ArgumentParserInternal.framework`, as
+Xcode's do. `mk/scripts/build-argumentparserinternal.sh` builds what linking
+against it takes from `src/swiftlang-llvm/swift-argument-parser-internal` —
+swift-argument-parser 1.5.1, whose exports built with library evolution under
+that module name are the framework's — and a stub of the framework, and
+SwiftBuild's imports of `ArgumentParser` are aliased to it. Linked in, the
+parser's classes were exported from SWBUtil, and swift-package, which links a
+copy of its own, had two of every one and could not parse its command line.
 
 Against Xcode's, the layout is the same, all 32 binaries have Xcode's run
-paths and every `version.plist` is identical; 27 binaries export exactly
+paths and every `version.plist` is identical; 29 binaries export exactly
 Xcode's symbols. What does not match:
 
 - `XCBSpecifications.ideplugin` is not built. Only the IDE reads it, and its
   `XCBSpecifications.xcplugindata` — which specs go to which domain — is not in
   the source.
-- SWBCore (31), SwiftBuild (2), SWBTaskConstruction (2) and SWBTaskExecution
-  (3) differ in symbols Apple's own sources, newer than 6.3.3, have.
-- SWBUtil exports the argument parser, which Xcode's takes from the system's
-  private `ArgumentParserInternal.framework`, as SWBTaskExecution and
-  SWBUniversalPlatform do.
+- SWBCore (31), SwiftBuild (2) and SWBTaskConstruction (2) differ in symbols
+  Apple's own sources, newer than 6.3.3, have.
 - The load commands are in another order, and dead-stripping drops a few
   libraries Xcode's still name.
+
+`swift-package` is the swift-package-manager port: SwiftPM's multi-call
+binary, one program for every command, with SwiftPM's own libraries and
+swift-syntax, swift-crypto, swift-certificates and the rest linked in
+statically, as Xcode's is. `swift-build`, `swift-run`, `swift-test`,
+`swift-sdk`, `swift-experimental-sdk`, `swift-package-collection` and
+`swift-package-registry` are links to it. CMake has no target for the
+multi-call binary, so `mk/patches/swift-package-manager/0001` adds one, linked
+as Xcode's is: dead-stripped, nothing exported, `libSwiftToolsSupport` named
+ahead of `libSwiftDriver` (which re-exports it) so both are loaded, and
+`libc++` kept. CMake does not pass `CMAKE_EXE_LINKER_FLAGS` to a Swift link,
+so those are the target's own link options. The port builds with CMake policy
+CMP0195 new: under the old one swift-syntax's module files are plain files
+where its install rule wants directories, and any re-configure of a built
+tree fails.
+
+`lib/swift/pm` — `ManifestAPI` with `libPackageDescription.dylib`, and
+`PluginAPI` with `libPackagePlugin.dylib` — is not taken from CMake, which
+builds CompilerPluginSupport as a third library and one architecture at a
+time. `mk/scripts/build-spm-runtime.sh` builds them as Apple's are: universal,
+CompilerPluginSupport inside `libPackageDescription`, with the flags Apple's
+interfaces record and the sources in sorted order, and only the
+`.swiftinterface` and `.swiftdoc` installed.
+
+Against Xcode's, `lib/swift/pm` has the same files, both libraries export
+exactly Xcode's symbols on both architectures and carry its run path, and the
+interfaces differ only in the compiler version line. `swift-package` has
+Xcode's run paths and loads Xcode's libraries. What does not match:
+
+- `swift-package` also loads CFNetwork: in the macOS 26.5 SDK `NSURLSession`
+  comes from `CFNetwork.tbd`, where Xcode's was linked against 26.4.
+- The load commands are in another order, and the runtime libraries name
+  libSystem before Foundation.
+- Ours is 43 MB to Xcode's 23 MB.
 
 `c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
 source for either, so both are written from what Apple's pass to the clang
@@ -1806,11 +1847,8 @@ build. Each is here with what stands in the way.
 
 - **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
   itself is built; see the llvm port above.)
-- **`swift-package`** and its links (`swift-build`, `swift-run`,
-  `swift-test`, `swift-sdk`, `swift-experimental-sdk`,
-  `swift-package-collection`, `swift-package-registry`) — SwiftPM itself is
-  not built yet; everything it links is, `SwiftBuild.framework` included.
-  `sourcekit-lsp`, `swift-format` and `docc` come after it.
+- **`sourcekit-lsp`**, **`swift-format`** and **`docc`** — not built yet;
+  they come after SwiftPM, which is.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,

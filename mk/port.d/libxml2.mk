@@ -15,7 +15,14 @@ P_CONFIGURE=	libxml2/configure
 # No Python bindings, no documentation, and none of the optional
 # compression or networking backends -- what is wanted is the parser,
 # the headers, and xmllint.
-P_CONFIGURE_ARGS=	--without-python \
+#
+# Against the internal SDK: Apple's quirks for old applications
+# (HTMLparser.c, SAX2.c) look up the running executable through
+# mach-o/dyld_priv.h, which is SPI and not in the public SDK.
+INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+
+P_CONFIGURE_ARGS=	CFLAGS=-isysroot${INTERNAL_SDK} \
+			--without-python \
 			--without-lzma \
 			--with-zlib \
 			--with-iconv \

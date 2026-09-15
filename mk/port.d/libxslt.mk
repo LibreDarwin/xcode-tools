@@ -24,7 +24,17 @@ LIBXML2_PREFIX=	${TOP}/build/ports/libxml2/stage/usr
 # mismatch an error rather than a warning; the call is harmless and
 # Apple built this with a compiler that only warned, so the warning is
 # turned back down rather than the source edited.
-P_CONFIGURE_ARGS=	CFLAGS=-Wno-error=incompatible-function-pointer-types \
+#
+# Against the internal SDK, as libxml2 is: xsltutils.c looks up the
+# running executable through mach-o/dyld_priv.h, which is SPI.
+INTERNAL_SDK=	${RELEASE}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.Internal.sdk
+
+# xml2-config reports its install prefix, so the libxml2 include path it
+# gives is -I/usr/include/libxml2, which nothing maps into the SDK once
+# the sysroot is named; the staged headers are given in CPPFLAGS, since
+# configure takes LIBXML_CFLAGS from xml2-config whatever it is set to.
+P_CONFIGURE_ARGS=	"CFLAGS=-Wno-error=incompatible-function-pointer-types -isysroot${INTERNAL_SDK}" \
+			CPPFLAGS=-I${LIBXML2_PREFIX}/include/libxml2 \
 			--without-python \
 			--without-crypto \
 			--with-libxml-prefix=${LIBXML2_PREFIX} \

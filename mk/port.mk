@@ -58,7 +58,9 @@
 #			toolchain's own are: with this tree's swift-build,
 #			SWIFTCI_USE_LOCAL_DEPS, and the checkouts it depends
 #			on beside it rather than fetched
-#	P_SWIFTPM_PRODUCT  the product swift-build builds (swiftpm only)
+#	P_SWIFTPM_PRODUCT  the products swift-build builds, one run each
+#			(swiftpm only); P_SWIFTPM_ARGS.<product> adds
+#			arguments to that product's run alone
 #	P_SWIFTPM_DEPS	pairs of <name> <dir>: each checkout under src/
 #			the package's manifest expects at ../<name>, linked
 #			there beside the copy of the source (swiftpm only)
@@ -353,6 +355,8 @@ ${P_WORKDIR}/.built: ${P_WORKDIR}/.configured
 	# -- so the Swift compiler is told as well.  Unused libraries are
 	# dead-stripped from the link, as Xcode's are: without it
 	# swift-format and docc name libc++ where Xcode's do not.
+	@: > ${P_WORKDIR}/build.log
+.for p in ${P_SWIFTPM_PRODUCT}
 	cd ${P_BUILDSRC} && env -u DEVELOPER_DIR SDKROOT=${MACOS_SDK} \
 		SWIFTCI_USE_LOCAL_DEPS=1 \
 		"PATH=${RELEASE}/${XCTOOLCHAIN}/usr/bin:$$PATH" \
@@ -360,10 +364,11 @@ ${P_WORKDIR}/.built: ${P_WORKDIR}/.configured
 		--triple arm64-apple-macosx${SWIFT_DEPLOYMENT_TARGET} \
 		-Xswiftc -target -Xswiftc arm64-apple-macosx${SWIFT_DEPLOYMENT_TARGET} \
 		-Xlinker -dead_strip_dylibs \
-		--product ${P_SWIFTPM_PRODUCT} ${P_MAKE_ARGS} \
-		> ${P_WORKDIR}/build.log 2>&1 || \
+		--product ${p} ${P_SWIFTPM_ARGS.${p}} ${P_MAKE_ARGS} \
+		>> ${P_WORKDIR}/build.log 2>&1 || \
 		{ ${ECHO} "port: ${P_NAME}: build failed, see ${P_WORKDIR}/build.log"; \
 		  tail -20 ${P_WORKDIR}/build.log; exit 1; }
+.endfor
 .else
 	cd ${P_OBJDIR} && ${P_MAKE} ${P_MAKE_ARGS} > ${P_WORKDIR}/build.log 2>&1 || \
 		{ ${ECHO} "port: ${P_NAME}: build failed, see ${P_WORKDIR}/build.log"; \

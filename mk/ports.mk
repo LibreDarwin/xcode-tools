@@ -146,6 +146,10 @@ PORTS+=	swiftlang-llvm/swift-tools-protocols swift-tools-protocols ${XCTOOLCHAIN
 # everything it is built against.  See mk/port.d/swift-build.mk.
 PORTS+=	swiftlang-llvm/swift-build swift-build ${XCTOOLCHAIN}/usr/bin
 
+# swift-package and lib/swift/pm, after SwiftBuild and the rest of what it
+# links.  See mk/port.d/swift-package-manager.mk.
+PORTS+=	swiftlang-llvm/swift-package-manager swift-package-manager ${XCTOOLCHAIN}/usr/bin
+
 # llvm-cbe reads the LLVM built above, so it comes after it.
 PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 

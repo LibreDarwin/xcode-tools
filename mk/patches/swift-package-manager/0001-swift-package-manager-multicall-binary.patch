@@ -1,0 +1,90 @@
+--- /dev/null
++++ b/Sources/PackageCollectionsCommand/CMakeLists.txt
+@@ -0,0 +1,26 @@
++# This source file is part of the Swift open source project
++#
++# Copyright (c) 2014 - 2025 Apple Inc. and the Swift project authors
++# Licensed under Apache License v2.0 with Runtime Library Exception
++#
++# See http://swift.org/LICENSE.txt for license information
++# See http://swift.org/CONTRIBUTORS.txt for Swift project authors
++
++add_library(PackageCollectionsCommand
++  PackageCollectionsCommand.swift)
++set_target_properties(PackageCollectionsCommand PROPERTIES
++  INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_Swift_MODULE_DIRECTORY})
++target_link_libraries(PackageCollectionsCommand PUBLIC
++  ArgumentParser
++  Basics
++  Commands
++  CoreCommands
++  PackageCollections
++  PackageModel
++  TSCBasic
++  TSCUtility)
++
++install(TARGETS PackageCollectionsCommand
++  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION lib
++  RUNTIME DESTINATION bin)
+--- /dev/null
++++ b/Sources/swift-package-manager/CMakeLists.txt
+@@ -0,0 +1,40 @@
++# This source file is part of the Swift open source project
++#
++# Copyright (c) 2014 - 2025 Apple Inc. and the Swift project authors
++# Licensed under Apache License v2.0 with Runtime Library Exception
++#
++# See http://swift.org/LICENSE.txt for license information
++# See http://swift.org/CONTRIBUTORS.txt for Swift project authors
++
++add_executable(swift-package-manager
++  SwiftPM.swift)
++target_link_libraries(swift-package-manager PRIVATE
++  Basics
++  Commands
++  SwiftSDKCommand
++  PackageCollectionsCommand
++  PackageRegistryCommand
++  TSCBasic)
++
++target_compile_options(swift-package-manager PRIVATE
++  -parse-as-library)
++
++# Linked the way Xcode's swift-package is.  libSwiftToolsSupport is named
++# ahead of libSwiftDriver, which re-exports it: after it, the symbols bind
++# to libSwiftDriver and libSwiftToolsSupport is dropped as unused, where
++# Xcode's loads both.  Dead-stripped, with nothing exported, which leaves
++# the libraries it uses rather than every one SwiftBuild's export names --
++# and libc++, which swift-crypto's BoringSSL brings and Xcode's keeps, kept
++# as needed.  (CMake does not pass CMAKE_EXE_LINKER_FLAGS to a Swift link.)
++if(APPLE)
++  target_link_options(swift-package-manager PRIVATE
++    "SHELL:$<TARGET_FILE:TSCBasic>"
++    "SHELL:-Xlinker -needed-lc++"
++    "SHELL:-Xlinker -dead_strip"
++    "SHELL:-Xlinker -dead_strip_dylibs"
++    "SHELL:-Xlinker -no_exported_symbols"
++    "SHELL:-Xlinker -headerpad_max_install_names")
++endif()
++
++install(TARGETS swift-package-manager
++  RUNTIME DESTINATION bin)
+--- a/Sources/CMakeLists.txt
++++ b/Sources/CMakeLists.txt
+@@ -24,6 +24,7 @@
+ add_subdirectory(PackageLoading)
+ add_subdirectory(PackageModel)
+ add_subdirectory(PackageRegistry)
++add_subdirectory(PackageCollectionsCommand)
+ add_subdirectory(PackageRegistryCommand)
+ add_subdirectory(PackageSigning)
+ add_subdirectory(QueryEngine)
+@@ -42,6 +43,7 @@
+ add_subdirectory(swift-test)
+ add_subdirectory(SwiftPMBuildServer)
+ add_subdirectory(SwiftSDKCommand)
++add_subdirectory(swift-package-manager)
+ add_subdirectory(Workspace)
+ add_subdirectory(XCBuildSupport)
+ add_subdirectory(SwiftBuildSupport)

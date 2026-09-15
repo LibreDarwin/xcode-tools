@@ -397,7 +397,12 @@ bundle-aliases: bundle-dirs
 	    swift-api-digester swift-frontend \
 	    swift-symbolgraph-extract swift-frontend \
 	    swift-synthesize-interface swift-frontend \
-	    swift-cache-tool swift-frontend
+	    swift-cache-tool swift-frontend \
+	    swift-build swift-package swift-test swift-package \
+	    swift-run swift-package swift-sdk swift-package \
+	    swift-experimental-sdk swift-package \
+	    swift-package-collection swift-package \
+	    swift-package-registry swift-package
 	@if [ -e ${TC_DIR}/usr/bin/${t} ] && [ ! -e ${TC_DIR}/usr/bin/${a} ]; then \
 		ln -sfn ${t} ${TC_DIR}/usr/bin/${a}; \
 		${ECHO} "alias: ${a} -> ${t}"; \
@@ -473,7 +478,12 @@ print-installs:
 	    swift-api-digester swift-frontend \
 	    swift-symbolgraph-extract swift-frontend \
 	    swift-synthesize-interface swift-frontend \
-	    swift-cache-tool swift-frontend
+	    swift-cache-tool swift-frontend \
+	    swift-build swift-package swift-test swift-package \
+	    swift-run swift-package swift-sdk swift-package \
+	    swift-experimental-sdk swift-package \
+	    swift-package-collection swift-package \
+	    swift-package-registry swift-package
 	@echo ${XCTOOLCHAIN}/usr/bin/${a}
 .endfor
 .for s in cc c++ clang++ cpp lex flex++ unifdefall \

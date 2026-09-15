@@ -1,0 +1,12 @@
+--- a/cmake/modules/CMakeLists.txt
++++ b/cmake/modules/CMakeLists.txt
+@@ -1,2 +1,9 @@
+ get_property(SwiftPM_EXPORTS GLOBAL PROPERTY SwiftPM_EXPORTS)
++# Built static, a library exported here brings the static libraries it
++# links with it, so those are exported as well.
++list(APPEND SwiftPM_EXPORTS
++  LLBuildManifest
++  SPMLLBuild
++  SPMSQLite3
++)
+ export(TARGETS ${SwiftPM_EXPORTS} FILE SwiftPMConfig.cmake)

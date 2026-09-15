@@ -8,10 +8,29 @@
 #
 # Stripped, with only /usr/lib/swift as a run path, which is what Xcode's
 # carries.
+#
+# And the two plugins sourcekitd loads for it, libSwiftSourceKitPlugin
+# into the service and libSwiftSourceKitClientPlugin into the client:
+# code completion goes through them, and without them sourcekit-lsp
+# answers hover and diagnostics and completes nothing.  sourcekit-lsp
+# looks for them in usr/lib as dylibs before it looks for frameworks, and
+# Xcode's dylibs are what these match -- two exported entry points, 6.3.0,
+# Xcode's install name and run path.  Xcode's SwiftSourceKitPlugin and
+# SwiftSourceKitClientPlugin frameworks are another build, from Xcode's own
+# SwiftSourceKitExtensions project, and are not made here.
 .include "${TOP}/mk/with-swift-cmake.mk"
 
+SKLSP_PLUGIN_ARGS=	-Xlinker -exported_symbol -Xlinker _sourcekitd_plugin_initialize \
+			-Xlinker -exported_symbol -Xlinker _sourcekitd_plugin_initialize_2 \
+			-Xlinker -current_version -Xlinker 6.3.0 \
+			-Xlinker -compatibility_version -Xlinker 1.0.0 \
+			-Xlinker -headerpad_max_install_names
+SKLSP_LIBDIR=	/Applications/Xcode.app/Contents/Developer/${XCTOOLCHAIN}/usr/lib
+
 P_BUILDSYS=	swiftpm
-P_SWIFTPM_PRODUCT=	sourcekit-lsp
+P_SWIFTPM_PRODUCT=	sourcekit-lsp SwiftSourceKitPlugin SwiftSourceKitClientPlugin
+P_SWIFTPM_ARGS.SwiftSourceKitPlugin=	${SKLSP_PLUGIN_ARGS}
+P_SWIFTPM_ARGS.SwiftSourceKitClientPlugin=	${SKLSP_PLUGIN_ARGS}
 P_SWIFTPM_DEPS=	cmark swiftlang-llvm/swift-cmark \
 		indexstore-db swiftlang-llvm/indexstore-db \
 		llbuild swiftlang-llvm/swift-llbuild \
@@ -35,5 +54,12 @@ P_SWIFTPM_DEPS=	cmark swiftlang-llvm/swift-cmark \
 		swift-tools-support-core swiftlang-llvm/swift-tools-support-core \
 		swiftpm swiftlang-llvm/swift-package-manager
 P_POST_BUILD=	strip sourcekit-lsp && \
-		sh ${TOP}/mk/scripts/set-rpaths.sh sourcekit-lsp /usr/lib/swift
+		sh ${TOP}/mk/scripts/set-rpaths.sh sourcekit-lsp /usr/lib/swift && \
+		for p in SwiftSourceKitPlugin SwiftSourceKitClientPlugin; do \
+			strip -x lib$$p.dylib && \
+			install_name_tool -id ${SKLSP_LIBDIR}/lib$$p.dylib lib$$p.dylib && \
+			sh ${TOP}/mk/scripts/set-rpaths.sh lib$$p.dylib /usr/lib/swift || \
+			exit 1; \
+		done
 P_PROGS=	sourcekit-lsp
+P_LIBS=		libSwiftSourceKitPlugin.dylib libSwiftSourceKitClientPlugin.dylib

@@ -385,3 +385,6 @@
 [submodule "src/extras/ClascalCompiler"]
 	path = src/extras/ClascalCompiler
 	url = https://github.com/maddisonmeier-wf/ClascalCompiler
+[submodule "swift-argument-parser-internal"]
+	path = src/swiftlang-llvm/swift-argument-parser-internal
+	url = https://github.com/apple/swift-argument-parser.git

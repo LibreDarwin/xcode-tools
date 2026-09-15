@@ -1728,6 +1728,48 @@ same 189 completions as Xcode's. What does not match:
   the `lib/swift/pm` the swift-package-manager port puts there; re-stage that
   port afterwards. A full build stages them in order.
 
+Xcode carries the two plugins a second time, as `SwiftSourceKitPlugin.framework`
+and `SwiftSourceKitClientPlugin.framework` in `usr/lib`, which Xcode's own
+editor (`IDESourceEditor`, SourceKit's agent) loads rather than sourcekit-lsp.
+Apple publish no source for them: their binaries name an internal project,
+`SwiftSourceKitExtensions` (24700), found in no public repository. What they
+contain is sourcekit-lsp's plugin code built another way, and that is what
+the sourcekit-lsp port rebuilds, from a copy patched by
+`mk/patches/sourcekit-lsp-frameworks` (`mk/scripts/build-sourcekit-plugin-frameworks.sh`):
+
+- The service plugin links `sourcekitdInProc.framework` rather than
+  `dlopen`ing it. A generated C target, `SwiftSourceKitPluginLinked`, fills
+  sourcekitd's four function tables from the functions themselves, and
+  SourceKitD gets an initializer that takes the tables ready-made.
+- Both plugins are entered through `sourcekitd_plugin_initialize`, the one
+  entry point Xcode's frameworks export: in 6.3.3 it is a `fatalError` in
+  favour of `sourcekitd_plugin_initialize_2`. The client plugin finds
+  `sourcekitd.framework` beside itself, as sourcekit-lsp's first plugin
+  (5709e1a8) did; sourcekitd falls back to the legacy entry point when a
+  plugin has no `_2`.
+- CompletionScoring is compiled with `-module-abi-name SwiftSourceKitPlugin`,
+  so its ranking API is the service framework's own, as in Xcode's, and each
+  framework is linked exporting exactly Xcode's framework's symbols (the lists
+  are beside the patch). The client module is `SwiftSourceKitClientPlugin_XcodeDefault`.
+
+`mk/scripts/stage-sourcekit-plugin-frameworks.sh` lays them out, with modules
+for arm64 and x86_64 around an arm64 binary, as Xcode's are.
+
+Against Xcode's, both frameworks have the same files and links, the same
+Info.plist and version.plist but for the build-machine keys, the same install
+names, versions, run paths and minimum macOS, and export exactly the same
+symbols. With the plugin dylibs moved aside, `sourcekit-lsp` loads the
+frameworks instead and gives the same hover and the same 189 completions.
+What does not match:
+
+- Xcode's are leaner rewrites of the same code — the client framework is
+  16 KB of text to ours' 432 KB — so the binaries are not the same. The
+  service framework calls 177 of sourcekitd's functions where Xcode's calls
+  85; given only Xcode's 85, 6.3.3's plugin reaches a null one and
+  SourceKitService crashes.
+- Ours also load `libswift_Concurrency` and `libswiftos`, and the client
+  framework CoreFoundation, which the plugin code uses and Xcode's do not.
+
 `c89` and `c99` are not ports but ours (`src/openxc-tools`): Apple publish no
 source for either, so both are written from what Apple's pass to the clang
 beside them, and match on 194 argument lists — `c89`'s FreeBSD-descended
@@ -1911,12 +1953,6 @@ build. Each is here with what stands in the way.
 
 - **`tapi-analyze`** — not in the published tapi source at all. (`tapi`
   itself is built; see the llvm port above.)
-- **`SwiftSourceKitPlugin.framework`** and
-  **`SwiftSourceKitClientPlugin.framework`** — Xcode's own build, from its
-  `SwiftSourceKitExtensions` project (version 24700), which exports the
-  completion-ranking API as well; the published source makes the plugins
-  as the dylibs beside them, which are built, and which `sourcekit-lsp`
-  looks for first.
 - **`clang-stat-cache`** — Apple's own; not in llvm-project.
 - **No source published:** `coremlc`/`coremlcompiler`, `createml`, `metal`,
   `metal-package-builder`, `fmadapterc`/`fmadaptercompiler`,

@@ -150,6 +150,13 @@ PORTS+=	swiftlang-llvm/swift-build swift-build ${XCTOOLCHAIN}/usr/bin
 # links.  See mk/port.d/swift-package-manager.mk.
 PORTS+=	swiftlang-llvm/swift-package-manager swift-package-manager ${XCTOOLCHAIN}/usr/bin
 
+# swift-format, docc and sourcekit-lsp, which this tree's swift-build builds
+# from the checkouts beside them.  See mk/port.d/{swift-format,swift-docc,
+# sourcekit-lsp}.mk and P_BUILDSYS=swiftpm in mk/port.mk.
+PORTS+=	swiftlang-llvm/swift-format swift-format ${XCTOOLCHAIN}/usr/bin
+PORTS+=	swiftlang-llvm/swift-docc swift-docc ${XCTOOLCHAIN}/usr/bin
+PORTS+=	swiftlang-llvm/sourcekit-lsp sourcekit-lsp ${XCTOOLCHAIN}/usr/bin
+
 # llvm-cbe reads the LLVM built above, so it comes after it.
 PORTS+=	extras/llvm-cbe llvm-cbe ${XCTOOLCHAIN}/usr/bin
 

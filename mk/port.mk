@@ -52,8 +52,16 @@
 #			<dest> relative to the Developer directory.  For a port that
 #			installs runtime data outside the toolchain --
 #			bmake's mk fragments, for instance.
-#	P_BUILDSYS	"autoconf" (default), "cmake", or "make" for a
-#			project that ships a Makefile and no configure step
+#	P_BUILDSYS	"autoconf" (default), "cmake", "make" for a
+#			project that ships a Makefile and no configure step,
+#			or "swiftpm" for a Swift package built the way the
+#			toolchain's own are: with this tree's swift-build,
+#			SWIFTCI_USE_LOCAL_DEPS, and the checkouts it depends
+#			on beside it rather than fetched
+#	P_SWIFTPM_PRODUCT  the product swift-build builds (swiftpm only)
+#	P_SWIFTPM_DEPS	pairs of <name> <dir>: each checkout under src/
+#			the package's manifest expects at ../<name>, linked
+#			there beside the copy of the source (swiftpm only)
 #	P_CONFIGURE	configure script, relative to the source dir
 #			(autoconf only; default: configure)
 #	P_CONFIGURE_ARGS  extra arguments to configure / cmake
@@ -138,6 +146,15 @@ _AUTOTOOLS_FLAGS?=	--disable-dependency-tracking --disable-nls
 # source, and for a tree the size of LLVM copying is actively wasteful.
 P_COPY?=		no
 P_MAKE?=		ninja
+.elif ${P_BUILDSYS:tl} == "swiftpm"
+# SwiftPM builds inside the package, so the package is copied; what it
+# makes is left under .build, taken from there, and not staged.  The
+# architecture's directory, not the release link beside it: configure
+# creates the object directory, and a real directory where SwiftPM puts
+# its link would stop it.
+P_COPY?=		yes
+P_OBJDIR?=		${P_WORKDIR}/src/.build/arm64-apple-macosx/release
+P_NOSTAGE?=		yes
 .else
 P_MAKE?=		make
 .endif
@@ -293,6 +310,15 @@ ${P_WORKDIR}/.configured: ${P_CONFDEP}
 	# this shape, and giving them a configure step to skip is simpler
 	# than pretending they have one.
 	@${ECHO} "port: ${P_NAME}: no configure step (Makefile only)"
+.elif ${P_BUILDSYS:tl} == "swiftpm"
+	# Nothing to configure but where the dependencies are.  The
+	# manifest, under SWIFTCI_USE_LOCAL_DEPS, names them as ../<name>,
+	# and the copy of the source is ${P_WORKDIR}/src, so the links go
+	# in the work directory.  Links, not copies: SwiftPM writes nothing
+	# into a path dependency.
+.for n d in ${P_SWIFTPM_DEPS}
+	@ln -sfn ${TOP}/src/${d} ${P_WORKDIR}/${n}
+.endfor
 .elif ${P_BUILDSYS:tl} == "cmake"
 	cd ${P_OBJDIR} && cmake -G Ninja ${P_BUILDSRC}/${P_CMAKE_SRC} \
 		-DCMAKE_INSTALL_PREFIX=${P_PREFIX} \
@@ -318,9 +344,31 @@ ${P_WORKDIR}/.configured: ${P_CONFDEP}
 
 ${P_WORKDIR}/.built: ${P_WORKDIR}/.configured
 	@${ECHO} "port: building ${P_NAME}"
+.if ${P_BUILDSYS:tl} == "swiftpm"
+	# This tree's swift-build, run directly: through xcrun, SDKROOT is
+	# xcrun's own SDK.  The sources are compiled against Xcode's SDK, as
+	# every Swift port's are, for macOS 14.0, which is what Xcode's
+	# tools are built for whatever the package's minimum says.  The
+	# triple alone does not do that -- the package's minimum still wins
+	# -- so the Swift compiler is told as well.  Unused libraries are
+	# dead-stripped from the link, as Xcode's are: without it
+	# swift-format and docc name libc++ where Xcode's do not.
+	cd ${P_BUILDSRC} && env -u DEVELOPER_DIR SDKROOT=${MACOS_SDK} \
+		SWIFTCI_USE_LOCAL_DEPS=1 \
+		"PATH=${RELEASE}/${XCTOOLCHAIN}/usr/bin:$$PATH" \
+		${RELEASE}/${XCTOOLCHAIN}/usr/bin/swift-build -c release \
+		--triple arm64-apple-macosx${SWIFT_DEPLOYMENT_TARGET} \
+		-Xswiftc -target -Xswiftc arm64-apple-macosx${SWIFT_DEPLOYMENT_TARGET} \
+		-Xlinker -dead_strip_dylibs \
+		--product ${P_SWIFTPM_PRODUCT} ${P_MAKE_ARGS} \
+		> ${P_WORKDIR}/build.log 2>&1 || \
+		{ ${ECHO} "port: ${P_NAME}: build failed, see ${P_WORKDIR}/build.log"; \
+		  tail -20 ${P_WORKDIR}/build.log; exit 1; }
+.else
 	cd ${P_OBJDIR} && ${P_MAKE} ${P_MAKE_ARGS} > ${P_WORKDIR}/build.log 2>&1 || \
 		{ ${ECHO} "port: ${P_NAME}: build failed, see ${P_WORKDIR}/build.log"; \
 		  tail -20 ${P_WORKDIR}/build.log; exit 1; }
+.endif
 .if defined(P_POST_BUILD)
 	@${ECHO} "port: post-build ${P_NAME}"
 	@cd ${P_OBJDIR} && ${P_POST_BUILD}

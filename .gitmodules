@@ -397,3 +397,6 @@
 [submodule "swift-format"]
 	path = src/swiftlang-llvm/swift-format
 	url = https://github.com/swiftlang/swift-format.git
+[submodule "swift-docc"]
+	path = src/swiftlang-llvm/swift-docc
+	url = https://github.com/swiftlang/swift-docc.git

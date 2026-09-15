@@ -94,4 +94,43 @@ typedef long double	__double_t;
 #define FP_ILOGB0		(-2147483647 - 1)
 #define FP_ILOGBNAN		(-2147483647 - 1)
 
+/*
+ * The classification macros, pointed at the libm this SDK links.
+ *
+ * msun spells the double forms FreeBSD's way -- __isinf, __isfinite,
+ * __isnormal, __signbit -- and libSystem on arm64 has none of them, so
+ * isinf() on a double compiled and then did not link.  Nor are Apple's
+ * d-suffixed exports a substitute: __isnormald answers 1 for a
+ * subnormal.  Apple's math.h calls neither under clang; it tests the
+ * value inline with the compiler's builtins, and so do these.  (It falls
+ * back to library calls only under -ffast-math, where the inline tests
+ * are unreliable; builtins are no worse there than those calls.)
+ *
+ * FP_NAN and the rest are Apple's numbers for the same reason as
+ * FP_ILOGB0 above: fpclassify() is Apple's __fpclassifyd, which answers
+ * 1 for a NaN where msun's constants say 2, so every comparison against
+ * msun's values was wrong.
+ */
+#undef FP_NAN
+#undef FP_INFINITE
+#undef FP_ZERO
+#undef FP_NORMAL
+#undef FP_SUBNORMAL
+#define FP_NAN			1
+#define FP_INFINITE		2
+#define FP_ZERO			3
+#define FP_NORMAL		4
+#define FP_SUBNORMAL		5
+
+#undef isfinite
+#undef isinf
+#undef isnan
+#undef isnormal
+#undef signbit
+#define isfinite(x)	__builtin_isfinite(x)
+#define isinf(x)	__builtin_isinf(x)
+#define isnan(x)	__builtin_isnan(x)
+#define isnormal(x)	__builtin_isnormal(x)
+#define signbit(x)	__builtin_signbit(x)
+
 #endif /* _XNUPORTS_MATH_H_ */

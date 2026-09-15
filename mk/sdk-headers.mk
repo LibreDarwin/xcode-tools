@@ -1200,6 +1200,20 @@ sdk-frameworks:
 	# see the header.  Appended before anything is asked to compile.
 	@cat ${FOUNDATION_EXTRA}/foundation-annotations.h \
 	    >> ${FOUNDATION_FW}/Versions/A/Headers/NSObjCRuntime.h
+	# What Swift needs of it besides the headers: the API notes, which
+	# give NSProcessInfo its Swift name and say NSString, NSArray and
+	# NSDictionary bridge, and the overlay's interface, which declares
+	# the bridging the system's Foundation binary implements.  Without
+	# the two, `import Foundation' has no ProcessInfo and no bridging, and
+	# no Package.swift that reads its environment compiles against this
+	# SDK.  The interface is the same for both architectures.
+	@cp -f ${PD_FOUNDATION}/Runtime.subproj/Foundation.apinotes \
+	    ${FOUNDATION_FW}/Versions/A/Headers/
+	@mkdir -p ${FOUNDATION_FW}/Versions/A/Modules/Foundation.swiftmodule
+.for a in arm64 x86_64
+	@cp -f ${PD_FOUNDATION}/Swift.subproj/Foundation.swiftinterface \
+	    ${FOUNDATION_FW}/Versions/A/Modules/Foundation.swiftmodule/${a}-apple-macos.swiftinterface
+.endfor
 .endif
 	@${TOP}/mk/scripts/make-tbd.sh \
 	    /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation \

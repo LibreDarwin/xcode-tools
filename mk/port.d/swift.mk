@@ -23,6 +23,22 @@ CMARK_BUILD=	${P_WORKDIR}/cmark-build
 P_BUILDSYS=	cmake
 P_CMAKE_SRC=	.
 
+# SourceKit, which sourcekit-lsp loads for everything it does with Swift:
+# sourcekitd.framework, the XPC client, its SourceKitService, and
+# sourcekitdInProc.framework, which the service links and which the
+# in-process client is.  Swift's default components leave sourcekit-inproc
+# out, and without it sourcekitdInProc is a plain library and the service
+# links SourceKit statically -- Xcode's is the framework, and its service
+# loads it.  So the components are the defaults plus that one.
+# DARWIN_TOOLCHAIN_VERSION is read by nothing but SourceKit, for its
+# bundle versions and service name; 6.3.3.1.3 is Xcode's.
+SWIFT_COMPONENTS=	autolink-driver compiler compiler-swift-syntax-lib \
+			clang-builtin-headers libexec stdlib sdk-overlay \
+			static-mirror-lib swift-syntax-lib editor-integration tools \
+			testsuite-tools toolchain-tools toolchain-dev-tools license \
+			sourcekit-xpc-service sourcekit-inproc swift-remote-mirror \
+			swift-remote-mirror-headers
+
 P_CONFIGURE_ARGS=	\
 	-DLLVM_DIR=${LLVM_BUILD}/lib/cmake/llvm \
 	-DClang_DIR=${LLVM_BUILD}/lib/cmake/clang \
@@ -40,7 +56,10 @@ P_CONFIGURE_ARGS=	\
 	-DBOOTSTRAPPING_MODE=HOSTTOOLS \
 	-DSWIFT_INCLUDE_TESTS=OFF \
 	-DSWIFT_INCLUDE_DOCS=OFF \
-	-DSWIFT_BUILD_SOURCEKIT=OFF \
+	-DSWIFT_BUILD_SOURCEKIT=ON \
+	-DBUILD_SOURCEKIT_XPC_SERVICE=ON \
+	'-DSWIFT_INSTALL_COMPONENTS=${SWIFT_COMPONENTS:ts;}' \
+	-DDARWIN_TOOLCHAIN_VERSION=6.3.3.1.3 \
 	-DSWIFT_ENABLE_EXPERIMENTAL_CONCURRENCY=ON
 
 # The compiler, and the standard library for this machine.  swift and
@@ -49,7 +68,8 @@ P_CONFIGURE_ARGS=	\
 # compiler here, not just a component of it.
 P_MAKE_ARGS=	swift-frontend swift-stdlib-macosx-arm64 \
 		libswiftDemangle.dylib swift-demangle swift-stdlib-tool \
-		swift-plugin-server SwiftInProcPluginServer
+		swift-plugin-server SwiftInProcPluginServer \
+		sourcekitd sourcekitdInProc SourceKitService
 
 P_NOSTAGE=	yes
 
@@ -82,7 +102,15 @@ P_POST_BUILD=	for f in lib/libswiftDemangle.dylib bin/swift-demangle \
 		rm -f lib/swift/host/lib_InternalSwiftScan.dylib && \
 		cp -f lib/lib_InternalSwiftScan.dylib lib/swift/host/compiler/ && \
 		ln -s compiler/lib_InternalSwiftScan.dylib \
-		    lib/swift/host/lib_InternalSwiftScan.dylib
+		    lib/swift/host/lib_InternalSwiftScan.dylib && \
+		rm -rf sourcekit && mkdir sourcekit && \
+		sh ${TOP}/mk/scripts/stage-sourcekitd.sh lib sourcekit
+
+# SourceKit, as mk/scripts/stage-sourcekitd.sh lays it out, into usr/lib.
+P_RELEASE_TREES=	sourcekit/sourcekitd.framework \
+			${XCTOOLCHAIN}/usr/lib/sourcekitd.framework \
+			sourcekit/sourcekitdInProc.framework \
+			${XCTOOLCHAIN}/usr/lib/sourcekitdInProc.framework
 
 # swift-demangle is the command-line demangler and swift-stdlib-tool the
 # one Xcode's build runs to copy the Swift runtime into an app bundle.

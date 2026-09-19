@@ -47,7 +47,13 @@ JSC_MANIFEST=	${TOP}/lib/javascriptcore-headers.txt
 JSC_FW=		${SDK_FRM}/JavaScriptCore.framework
 IOKIT_FW=	${SDK_FRM}/IOKit.framework
 FOUNDATION_FW=	${SDK_FRM}/Foundation.framework
+# Prefer the live Foundation checkout used by the workspace.  Keep the
+# in-tree PureDarwin copy as a portable fallback for standalone xcode-tools
+# checkouts; callers can override PD_FOUNDATION when staging elsewhere.
+PD_FOUNDATION?=	${TOP}/../Foundation
+.if !exists(${PD_FOUNDATION}/Runtime.subproj/Foundation.h)
 PD_FOUNDATION=	${TOP}/src/puredarwin/Foundation
+.endif
 FOUNDATION_EXTRA=	${TOP}/lib/foundation-extra
 CS_FW=		${SDK_FRM}/CoreServices.framework
 FSE_FW=		${CS_FW}/Versions/A/Frameworks/FSEvents.framework

@@ -433,3 +433,6 @@
 [submodule "src/lib/libcompiler_rt"]
 	path = src/lib/libcompiler_rt
 	url = https://github.com/samuelfzormeister/Libcompiler_rt
+[submodule "src/puredarwin/libfeatureflags"]
+	path = src/puredarwin/libfeatureflags
+	url = https://github.com/samuelfzormeister/libfeatureflags.git

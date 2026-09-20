@@ -427,3 +427,6 @@
 [submodule "src/lib/blocksruntime"]
 	path = src/lib/blocksruntime
 	url = https://github.com/mackyle/blocksruntime
+[submodule "src/lib/icu4c-iosx"]
+	path = src/lib/icu4c-iosx
+	url = https://github.com/apotocki/icu4c-iosx

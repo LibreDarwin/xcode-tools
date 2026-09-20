@@ -424,3 +424,6 @@
 [submodule "swift-toolchain-sqlite"]
 	path = src/swiftlang-llvm/swift-toolchain-sqlite
 	url = https://github.com/swiftlang/swift-toolchain-sqlite.git
+[submodule "src/lib/blocksruntime"]
+	path = src/lib/blocksruntime
+	url = https://github.com/mackyle/blocksruntime

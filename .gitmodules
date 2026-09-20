@@ -436,3 +436,6 @@
 [submodule "src/puredarwin/libfeatureflags"]
 	path = src/puredarwin/libfeatureflags
 	url = https://github.com/samuelfzormeister/libfeatureflags.git
+[submodule "src/misc/disarm64"]
+	path = src/misc/disarm64
+	url = https://github.com/kromych/disarm64.git

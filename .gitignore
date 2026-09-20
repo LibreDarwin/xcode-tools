@@ -11,3 +11,6 @@ build/
 # macOS metadata
 *.dSYM
 **/*.dSYM
+
+# Claude local settings
+.claude/settings.local.json

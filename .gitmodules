@@ -430,3 +430,6 @@
 [submodule "src/lib/icu4c-iosx"]
 	path = src/lib/icu4c-iosx
 	url = https://github.com/apotocki/icu4c-iosx
+[submodule "src/lib/libcompiler_rt"]
+	path = src/lib/libcompiler_rt
+	url = https://github.com/samuelfzormeister/Libcompiler_rt

@@ -13,7 +13,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "plist.h"
+#include <CoreFoundation/CoreFoundation.h>
+
 #include "sdkpath.h"
 
 static int
@@ -134,7 +135,34 @@ struct canonical_search {
 	const char *name;
 	int family_ok;
 	char *found;
+	char *fallback;
 };
+
+/*
+ * Does the bundle sit in a directory named for the name it answers to?
+ *
+ * An installation carries an SDK under several names -- a plain
+ * "MacOSX.sdk" and a "MacOSX26.5.sdk" for the very same thing -- and
+ * which of them is reported is decided by whether the directory is named
+ * for the SDK.  A bundle called after its own canonical name is the one
+ * meant; the others are links to it, and naming the link is how a
+ * requested name finds out what it resolves to.
+ */
+static int
+named_for_canonical(const char *sdkpath, const char *canonical)
+{
+	const char *base = strrchr(sdkpath, '/');
+	size_t len;
+
+	if ((base = (base != NULL) ? base + 1 : sdkpath), (len = strlen(base)) < 4)
+		return 0;
+
+	if (strcmp(base + len - 4, ".sdk") != 0)
+		return 0;
+
+	return strlen(canonical) == len - 4 &&
+	    strncasecmp(base, canonical, len - 4) == 0;
+}
 
 static void
 canonical_probe(const char *platform, const char *sdkpath, void *ctx)
@@ -150,8 +178,16 @@ canonical_probe(const char *platform, const char *sdkpath, void *ctx)
 	if ((canonical = xt_sdk_setting(sdkpath, "CanonicalName")) == NULL)
 		return;
 
-	if (canonical_matches(canonical, search->name, search->family_ok))
-		search->found = strdup(sdkpath);
+	if (canonical_matches(canonical, search->name, search->family_ok)) {
+		/*
+		 * Keep the first match only as a fallback: a later bundle
+		 * named for the name it answers to is preferred over it.
+		 */
+		if (search->fallback == NULL)
+			search->fallback = strdup(sdkpath);
+		if (named_for_canonical(sdkpath, canonical))
+			search->found = strdup(sdkpath);
+	}
 
 	free(canonical);
 }
@@ -165,6 +201,40 @@ xt_find_sdk(const char *devdir, const char *name)
 	if (devdir == NULL || name == NULL)
 		return NULL;
 
+	/*
+	 * An SDK is named by what it says it is, so ask the SDKs that way
+	 * first.  It is what decides between the several directory names
+	 * an installation carries one SDK under, and the name matched here
+	 * is the one reported rather than a link to it.  Exact canonical
+	 * names are tried before the family match, so an explicit
+	 * "macosx26.5.internal" is never answered by the family below.
+	 */
+	search.name = name;
+	search.found = NULL;
+	search.fallback = NULL;
+
+	search.family_ok = 0;
+	xt_foreach_sdk(devdir, canonical_probe, &search);
+	if (search.found == NULL)
+		search.found = search.fallback;
+	search.fallback = NULL;
+	if (search.found != NULL)
+		return search.found;
+
+	search.family_ok = 1;
+	xt_foreach_sdk(devdir, canonical_probe, &search);
+	if (search.found == NULL)
+		search.found = search.fallback;
+	else
+		free(search.fallback);
+	if (search.found != NULL)
+		return search.found;
+
+	/*
+	 * Nothing here calls itself that, so look for a bundle named for
+	 * the directory it is in.  An SDK that carries no SDKSettings.plist
+	 * to be named by can only be found this way.
+	 */
 	if ((path = find_sdk_in_platforms(devdir, name)) != NULL)
 		return path;
 
@@ -178,23 +248,7 @@ xt_find_sdk(const char *devdir, const char *name)
 	}
 	free(path);
 
-	/*
-	 * No bundle by that directory name, so ask the SDKs what they
-	 * call themselves.  Exact canonical names first, so an explicit
-	 * "macosx26.5.internal" is never answered by the family match
-	 * below.
-	 */
-	search.name = name;
-	search.found = NULL;
-
-	search.family_ok = 0;
-	xt_foreach_sdk(devdir, canonical_probe, &search);
-	if (search.found != NULL)
-		return search.found;
-
-	search.family_ok = 1;
-	xt_foreach_sdk(devdir, canonical_probe, &search);
-	return search.found;
+	return NULL;
 }
 
 /*
@@ -410,13 +464,20 @@ xt_foreach_sdk(const char *devdir, xt_sdk_cb cb, void *ctx)
 }
 
 /*
- * Read a plist wholesale.  These files are small -- a few kilobytes at
- * most -- so there is no reason to stream them.
+ * Read a plist wholesale, as a dictionary CoreFoundation owns.
+ *
+ * These files are small -- a few kilobytes at most -- so they are read in
+ * one go.  CFPropertyList recognises the XML and binary dialects alike, so
+ * the same call covers an SDK shipping either one.
+ *
+ * The caller owns the result and releases it with CFRelease().
  */
-static plist_node *
+static CFDictionaryRef
 read_plist(const char *path)
 {
-	plist_node *root;
+	CFDictionaryRef dict;
+	CFDataRef data;
+	CFTypeRef plist;
 	struct stat st;
 	char *text;
 	size_t got;
@@ -424,7 +485,7 @@ read_plist(const char *path)
 
 	if (stat(path, &st) != 0 || !S_ISREG(st.st_mode))
 		return NULL;
-	if ((fp = fopen(path, "r")) == NULL)
+	if ((fp = fopen(path, "rb")) == NULL)
 		return NULL;
 	if ((text = malloc((size_t)st.st_size + 1)) == NULL) {
 		fclose(fp);
@@ -433,20 +494,88 @@ read_plist(const char *path)
 
 	got = fread(text, 1, (size_t)st.st_size, fp);
 	fclose(fp);
-	text[got] = '\0';
 
-	root = plist_parse_any(text, got);
+	data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)text, (CFIndex)got);
 	free(text);
+	if (data == NULL)
+		return NULL;
 
-	return root;
+	/*
+	 * A property list may be rooted at an array or a string, and every
+	 * caller wants a dictionary to look a key up in.  Refusing anything
+	 * else here keeps the cast honest -- handing an array to
+	 * CFDictionaryGetValue() raises instead of returning NULL.
+	 */
+	plist = CFPropertyListCreateWithData(kCFAllocatorDefault, data,
+	    kCFPropertyListImmutable, NULL, NULL);
+	CFRelease(data);
+	if (plist == NULL)
+		return NULL;
+
+	if (CFGetTypeID(plist) != CFDictionaryGetTypeID()) {
+		CFRelease(plist);
+		return NULL;
+	}
+	dict = (CFDictionaryRef)plist;
+
+	return dict;
+}
+
+/*
+ * The value for one key, or NULL when it is absent.  The key arrives as a
+ * C string rather than a CFString, and CFSTR() only accepts a literal --
+ * it concatenates its argument into a string literal at compile time -- so
+ * the lookup key is built here instead.
+ */
+static CFTypeRef
+dict_value(CFDictionaryRef dict, const char *key)
+{
+	CFStringRef cfkey;
+	CFTypeRef value;
+
+	if (dict == NULL || key == NULL)
+		return NULL;
+	if ((cfkey = CFStringCreateWithCString(kCFAllocatorDefault, key,
+	    kCFStringEncodingUTF8)) == NULL)
+		return NULL;
+
+	value = CFDictionaryGetValue(dict, cfkey);
+	CFRelease(cfkey);
+
+	return value;
+}
+
+/*
+ * A strdup'd C string for one string member, or NULL when the key is
+ * absent or holds something other than a string.
+ */
+static char *
+dict_string(CFDictionaryRef dict, const char *key)
+{
+	CFStringRef value;
+	char buf[PATH_MAX];
+	char *out;
+
+	if ((value = (CFStringRef)dict_value(dict, key)) == NULL)
+		return NULL;
+	if (CFGetTypeID(value) != CFStringGetTypeID())
+		return NULL;
+	if (!CFStringGetCString(value, buf, (CFIndex)sizeof(buf),
+	    kCFStringEncodingUTF8))
+		return NULL;
+
+	if ((out = strdup(buf)) == NULL)
+		return NULL;
+
+	return out;
 }
 
 static char *
 sdk_string(const char *sdkpath, const char *section, const char *key)
 {
 	char path[PATH_MAX];
-	plist_node *root, *dict, *node;
-	char *value = NULL;
+	CFDictionaryRef root, dict;
+	char *value;
 
 	if (sdkpath == NULL || key == NULL)
 		return NULL;
@@ -456,15 +585,17 @@ sdk_string(const char *sdkpath, const char *section, const char *key)
 		return NULL;
 
 	dict = root;
-	if (section != NULL && (dict = plist_dict_get(root, section)) == NULL) {
-		plist_free(root);
-		return NULL;
+	if (section != NULL) {
+		dict = (CFDictionaryRef)dict_value(root, section);
+		if (dict == NULL || CFGetTypeID(dict) != CFDictionaryGetTypeID()) {
+			CFRelease(root);
+			return NULL;
+		}
 	}
 
-	if ((node = plist_dict_get(dict, key)) != NULL && node->string != NULL)
-		value = strdup(node->string);
+	value = dict_string(dict, key);
+	CFRelease(root);
 
-	plist_free(root);
 	return value;
 }
 
@@ -491,8 +622,8 @@ char *
 xt_platform_setting(const char *platformpath, const char *key)
 {
 	char path[PATH_MAX];
-	plist_node *root, *node;
-	char *value = NULL;
+	CFDictionaryRef root;
+	char *value;
 
 	if (platformpath == NULL || key == NULL)
 		return NULL;
@@ -501,10 +632,9 @@ xt_platform_setting(const char *platformpath, const char *key)
 	if ((root = read_plist(path)) == NULL)
 		return NULL;
 
-	if ((node = plist_dict_get(root, key)) != NULL && node->string != NULL)
-		value = strdup(node->string);
+	value = dict_string(root, key);
+	CFRelease(root);
 
-	plist_free(root);
 	return value;
 }
 
@@ -512,8 +642,8 @@ char *
 xt_toolchain_identifier(const char *tcpath)
 {
 	char path[PATH_MAX];
-	plist_node *root, *node;
-	char *value = NULL;
+	CFDictionaryRef root;
+	char *value;
 
 	if (tcpath == NULL)
 		return NULL;
@@ -522,10 +652,37 @@ xt_toolchain_identifier(const char *tcpath)
 	if ((root = read_plist(path)) == NULL)
 		return NULL;
 
-	if ((node = plist_dict_get(root, "Identifier")) != NULL &&
-	    node->string != NULL)
-		value = strdup(node->string);
+	value = dict_string(root, "Identifier");
+	CFRelease(root);
 
-	plist_free(root);
+	return value;
+}
+
+/*
+ * The build an SDK carries.
+ *
+ * An SDK does not name its own build: the version it was cut from is
+ * recorded in the SystemVersion.plist it ships, and that is the one
+ * reported for the SDK, so it is read from there rather than invented
+ * from the version number.
+ */
+char *
+xt_sdk_build_version(const char *sdkpath)
+{
+	char path[PATH_MAX];
+	CFDictionaryRef root;
+	char *value;
+
+	if (sdkpath == NULL)
+		return NULL;
+
+	snprintf(path, sizeof(path), "%s/System/Library/CoreServices/"
+	    "SystemVersion.plist", sdkpath);
+	if ((root = read_plist(path)) == NULL)
+		return NULL;
+
+	value = dict_string(root, "ProductBuildVersion");
+	CFRelease(root);
+
 	return value;
 }

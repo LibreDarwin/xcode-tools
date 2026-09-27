@@ -46,7 +46,6 @@
 #include "devpath.h"
 #include "sdkpath.h"
 #include "ini.h"
-#include "plist.h"
 #include "project.h"
 
 #define XCRUN_DEFAULT_CFG "/usr/local/etc/xcrun.ini"

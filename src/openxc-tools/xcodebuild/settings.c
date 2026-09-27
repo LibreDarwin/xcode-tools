@@ -49,7 +49,6 @@
 #include "sdkpath.h"
 #include "xcodebuild.h"
 #include "ini.h"
-#include "plist.h"
 
 /* ------------------------------------------------------------------ */
 /* Settings table                                                       */

@@ -44,7 +44,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include "xcodebuild.h"
-#include "plist.h"
 #include "project.h"
 #include "sdkpath.h"
 

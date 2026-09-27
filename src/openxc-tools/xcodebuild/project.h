@@ -40,14 +40,12 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include "xcodebuild.h"
-#include "plist.h"
-
 /* Resolve <path>/project.pbxproj for a .xcodeproj / path. Returns a malloc'd
  * absolute path (caller frees), or NULL if not found. */
 char *project_pbxproj_path(const char *project);
 
-/* Load and parse a project.pbxproj into a plist tree. Caller releases with
- * plist_free(). Returns NULL on failure. */
+/* Load and parse a project.pbxproj into a property list. Caller releases with
+ * CFRelease(). Returns NULL on failure. */
 CFTypeRef project_load_pbxproj(const char *project);
 
 /* Resolve a target/config's buildSettings node (borrowed from `root`). */

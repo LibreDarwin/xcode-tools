@@ -38,7 +38,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <stddef.h>
-#include "plist.h"
 
 #define XCODEBUILD_VERSION "1.0.0"
 #define XCODEBUILD_DEFAULT_DEVELOPER_DIR "/Library/Developer/CommandLineTools"

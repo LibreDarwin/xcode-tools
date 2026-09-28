@@ -1039,8 +1039,19 @@ merge_entry(const void *key, const void *value, void *ctx)
 			return;
 		}
 	} else if (value != NULL && CFGetTypeID(value) == CFArrayGetTypeID()) {
+		char *expanded;
+
+		/*
+		 * An array is expanded on the same terms as a string.  Xcode
+		 * writes search paths as arrays far more often than not, and
+		 * they are written as $(SRCROOT)/... more often than not,
+		 * so leaving the references in turns every relative include
+		 * path into one the compiler cannot open.
+		 */
 		join_array((CFArrayRef)value, vbuf, sizeof(vbuf));
-		settings_set(t, kbuf, vbuf);
+		expanded = settings_expand(t, vbuf);
+		settings_set(t, kbuf, (expanded != NULL) ? expanded : vbuf);
+		free(expanded);
 		return;
 	}
 

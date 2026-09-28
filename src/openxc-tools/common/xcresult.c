@@ -31,7 +31,7 @@
 
 #include <zstd.h>
 
-#include "plist.h"
+#include <CoreFoundation/CoreFoundation.h>
 
 /* --- the object tree ---------------------------------------------- */
 
@@ -275,11 +275,36 @@ read_whole(const char *path, size_t *len)
 	return (buf);
 }
 
+/* A borrowed value, or NULL if dict is absent, is not a dictionary, or has no
+ * such key.  The caller must keep dict alive for as long as it uses the result.
+ */
+static CFTypeRef
+dict_value(CFDictionaryRef dict, const char *key)
+{
+	CFStringRef cfkey;
+	CFTypeRef value;
+
+	if (dict == NULL || key == NULL ||
+	    CFGetTypeID(dict) != CFDictionaryGetTypeID())
+		return (NULL);
+	if ((cfkey = CFStringCreateWithCString(kCFAllocatorDefault, key,
+	    kCFStringEncodingUTF8)) == NULL)
+		return (NULL);
+
+	value = CFDictionaryGetValue(dict, cfkey);
+	CFRelease(cfkey);
+
+	return (value);
+}
+
 char *
 xcresult_root_id(const char *bundle)
 {
 	char path[PATH_MAX];
-	plist_node *root, *id, *hash;
+	CFDataRef data;
+	CFDictionaryRef root, id;
+	CFTypeRef hash;
+	char buf[PATH_MAX];
 	char *text, *out = NULL;
 	size_t len;
 
@@ -288,15 +313,30 @@ xcresult_root_id(const char *bundle)
 	if (text == NULL)
 		return (NULL);
 
-	root = plist_parse_any(text, len);
-	if (root != NULL &&
-	    (id = plist_dict_get(root, "rootId")) != NULL &&
-	    (hash = plist_dict_get(id, "hash")) != NULL &&
-	    hash->string != NULL)
-		out = strdup(hash->string);
-
-	plist_free(root);
+	data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)text,
+	    (CFIndex)len);
 	free(text);
+	if (data == NULL)
+		return (NULL);
+
+	root = (CFDictionaryRef)CFPropertyListCreateWithData(kCFAllocatorDefault,
+	    data, kCFPropertyListImmutable, NULL, NULL);
+	CFRelease(data);
+	if (root == NULL)
+		return (NULL);
+	if (CFGetTypeID(root) != CFDictionaryGetTypeID()) {
+		CFRelease(root);
+		return (NULL);
+	}
+
+	id = (CFDictionaryRef)dict_value(root, "rootId");
+	hash = dict_value(id, "hash");
+	if (hash != NULL && CFGetTypeID(hash) == CFStringGetTypeID() &&
+	    CFStringGetCString((CFStringRef)hash, buf, (CFIndex)sizeof(buf),
+	    kCFStringEncodingUTF8))
+		out = strdup(buf);
+
+	CFRelease(root);
 	return (out);
 }
 

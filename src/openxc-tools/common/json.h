@@ -1,8 +1,9 @@
 /*
  * json.h -- a JSON document model.
  *
- * Shaped after plist.h next door, because the two are read the same way:
- * parse a whole document, then walk it by key.  The minimal extractor in
+ * Shaped after the property list model these tools used to carry in their own
+ * parser, because the two are read the same way: parse a whole document, then
+ * walk it by key.  The minimal extractor in
  * notarytool answers "what is the value of this key" against a flat
  * response and cannot describe a nested document; a string catalog is
  * nested several levels deep, so this builds the tree.

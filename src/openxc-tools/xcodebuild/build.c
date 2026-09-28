@@ -2884,6 +2884,30 @@ add_linker_arg(char *argv[], int a, int max, const char *flag,
 	return a;
 }
 
+/*
+ * Pass a setting's words straight through to the command line.  This is
+ * for the OTHER_* settings, whose words are the arguments themselves:
+ * -framework, CoreFoundation, -Wall.  add_setting_args cannot serve them
+ * because it prefixes every word with a flag of its own.
+ */
+static int
+add_arg_words(char *argv[], int a, int max, const char *value)
+{
+	const char *p = value;
+	char word[PATH_MAX];
+
+	if (value == NULL || *value == '\0')
+		return a;
+
+	while (a + 1 < max && next_word(&p, word, sizeof(word))) {
+		if (word[0] == '\0')
+			continue;
+		argv[a++] = strdup(word);
+	}
+
+	return a;
+}
+
 /* Where the binary looks for the dylibs it links, one -rpath each. */
 static int
 add_rpath_args(char *argv[], int a, int max, const char *value)
@@ -2924,6 +2948,7 @@ build_one_target(CFTypeRef objects, CFTypeRef chosen, const char *source_root,
 	struct product prod;
 	char cfgbuf[128], pnbuf[256], sdkbuf[PATH_MAX];
 	char srbuf[PATH_MAX], fullbuf[PATH_MAX], fwbuf[64], rpbuf[PATH_MAX];
+	char ldflagsbuf[PATH_MAX];
 	char instname[PATH_MAX];
 	int is_framework, dylib;
 	CFIndex i;
@@ -3268,6 +3293,7 @@ build_one_target(CFTypeRef objects, CFTypeRef chosen, const char *source_root,
 					const char *src;
 					char obj[PATH_MAX], *argv[256];
 					char dep[PATH_MAX], cmdstamp[PATH_MAX];
+					char cflagsbuf[PATH_MAX];
 					const char *base;
 					int a = 0;
 
@@ -3331,6 +3357,16 @@ build_one_target(CFTypeRef objects, CFTypeRef chosen, const char *source_root,
 					a = add_setting_args(argv, a, 240,
 					    settings_get(t, "GCC_PREPROCESSOR_DEFINITIONS"),
 					    "-D", NULL);
+
+					/*
+					 * Whatever else the project wants told
+					 * to the compiler.  These words are
+					 * arguments in their own right, so
+					 * they go on exactly as written.
+					 */
+					a = add_arg_words(argv, a, 240,
+					    setting(t, "OTHER_CFLAGS", cflagsbuf,
+					    sizeof(cflagsbuf)));
 
 					/*
 					 * Ask for the header list while compiling:
@@ -3604,6 +3640,18 @@ have_linker:
 						    (int)(sizeof(argv) / sizeof(argv[0])) - 1,
 						    setting(t, "LD_RUNPATH_SEARCH_PATHS", rpbuf,
 						    sizeof(rpbuf)));
+
+						/*
+						 * And whatever else the project wants told
+						 * to the linker.  CoreFoundation, for one:
+						 * a target that reads property lists
+						 * through it does not link without
+						 * being told to.
+						 */
+						a = add_arg_words(argv, a,
+						    (int)(sizeof(argv) / sizeof(argv[0])) - 1,
+						    setting(t, "OTHER_LDFLAGS", ldflagsbuf,
+						    sizeof(ldflagsbuf)));
 
 						argv[a] = NULL;
 

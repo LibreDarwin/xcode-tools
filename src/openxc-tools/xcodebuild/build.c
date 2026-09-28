@@ -32,6 +32,7 @@
 
 #include "xcodebuild.h"
 #include "project.h"
+#include "xcpath.h"
 
 /* ------------------------------------------------------------------ */
 /* property list access, as in project.c                                */
@@ -3877,7 +3878,6 @@ int build_run(const char *project, settings_table *t,
 	struct pathmap map;
 	struct idlist order, stack, wanted;
 	char source_root[PATH_MAX], chosen_id[512] = "";
-	const char *slash;
 	char name_buf[512];
 	size_t k;
 	int rc = 0, foreign = 0;
@@ -3899,9 +3899,8 @@ int build_run(const char *project, settings_table *t,
 	memset(&wanted, 0, sizeof(wanted));
 
 	/* Paths in a project are relative to the directory holding it. */
-	snprintf(source_root, sizeof(source_root), "%s", project);
-	if ((slash = strrchr(source_root, '/')) != NULL)
-		*(char *)slash = '\0';
+	if (xc_dirname(project, source_root, sizeof(source_root)) == NULL)
+		snprintf(source_root, sizeof(source_root), ".");
 
 	objects = bget(root, "objects");
 	root_id = bget(root, "rootObject");

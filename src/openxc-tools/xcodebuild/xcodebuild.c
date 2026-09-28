@@ -46,6 +46,7 @@
 #include "cfplist.h"
 #include "devpath.h"
 #include "sdkpath.h"
+#include "xcpath.h"
 #include "ini.h"
 #include "project.h"
 
@@ -499,13 +500,10 @@ static settings_table *settings_for(const xcodebuild_opts *opts,
 			 * are written relative to this, and $(SRCROOT)
 			 * appears in them constantly.
 			 */
-			{
-				const char *sl;
-
-				snprintf(sr, sizeof(sr), "%s", project);
-				if ((sl = strrchr(sr, '/')) != NULL)
-					*(char *)sl = '\0';
-				settings_set(t, "SRCROOT", sr);
+		{
+			if (xc_dirname(project, sr, sizeof(sr)) == NULL)
+				snprintf(sr, sizeof(sr), ".");
+			settings_set(t, "SRCROOT", sr);
 				settings_set(t, "SOURCE_ROOT", sr);
 				settings_set(t, "PROJECT_DIR", sr);
 
@@ -785,7 +783,6 @@ workspace_build(xcodebuild_opts *opts, const char *devpath)
 	char **projects = NULL, **names = NULL, **containers = NULL;
 	char root[PATH_MAX];
 	int nprojects, n = 0, i, j, rc = 0, built = 0;
-	const char *slash;
 
 	if (opts->scheme == NULL) {
 		fprintf(stderr, "xcodebuild: error: a workspace is built by"
@@ -801,9 +798,8 @@ workspace_build(xcodebuild_opts *opts, const char *devpath)
 	}
 
 	/* One build directory beside the workspace, shared by them all. */
-	snprintf(root, sizeof(root), "%s", opts->workspace);
-	if ((slash = strrchr(root, '/')) != NULL)
-		*(char *)slash = '\0';
+	if (xc_dirname(opts->workspace, root, sizeof(root)) == NULL)
+		snprintf(root, sizeof(root), ".");
 	strlcat(root, "/build", sizeof(root));
 	opts->build_root = strdup(root);
 

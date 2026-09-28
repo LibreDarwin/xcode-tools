@@ -1,5 +1,6 @@
 # xcodebuild -- build orchestration.
 T_SRCS=	build.c ini.c project.c settings.c xcodebuild.c
+T_SRCS+=	src/openxc-tools/common/xcpath.c
 .include "${TOP}/mk/with-devpath.mk"
 .include "${TOP}/mk/with-sdkpath.mk"
 

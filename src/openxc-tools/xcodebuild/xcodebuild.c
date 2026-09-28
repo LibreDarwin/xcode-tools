@@ -43,6 +43,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include "xcodebuild.h"
+#include "cfplist.h"
 #include "devpath.h"
 #include "sdkpath.h"
 #include "ini.h"
@@ -72,23 +73,6 @@ static int endswith(const char *s, const char *suffix)
 	size_t ls = strlen(s);
 	size_t lss = strlen(suffix);
 	return ls >= lss && strcmp(s + ls - lss, suffix) == 0;
-}
-
-static char *read_file_all(const char *path)
-{
-	FILE *fp = fopen(path, "rb");
-	if (fp == NULL)
-		return NULL;
-	if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
-	long sz = ftell(fp);
-	if (sz < 0) { fclose(fp); return NULL; }
-	rewind(fp);
-	char *buf = (char *)malloc((size_t)sz + 1);
-	if (buf == NULL) { fclose(fp); return NULL; }
-	size_t rd = fread(buf, 1, (size_t)sz, fp);
-	fclose(fp);
-	buf[rd] = '\0';
-	return buf;
 }
 
 static void free_strv(char **v, size_t n)
@@ -1061,53 +1045,8 @@ static int do_clean(const xcodebuild_opts *opts, settings_table *t)
 }
 
 /* ------------------------------------------------------------------ */
-/* export options plist (minimal XML plist extraction)               */
+/* export options plist                                               */
 /* ------------------------------------------------------------------ */
-
-static char *xml_value(const char *s, const char *e)
-{
-	char *v = (char *)malloc((e - s) + 1);
-	if (v == NULL)
-		return NULL;
-	memcpy(v, s, e - s);
-	v[e - s] = '\0';
-	return v;
-}
-
-static char *xmlplist_get(const char *text, const char *key)
-{
-	char keyname[512];
-	snprintf(keyname, sizeof(keyname), "<key>%s</key>", key);
-	const char *k = strstr(text, keyname);
-	if (k == NULL)
-		return NULL;
-	const char *p = k + strlen(keyname);
-	while (*p && isspace((unsigned char)*p)) p++;
-
-	if (strncmp(p, "<string>", 8) == 0) {
-		const char *s = p + 8;
-		const char *e = strstr(s, "</string>");
-		if (e == NULL) return NULL;
-		return xml_value(s, e);
-	}
-	if (strncmp(p, "<true", 5) == 0)
-		return strdup("YES");
-	if (strncmp(p, "<false", 6) == 0)
-		return strdup("NO");
-	if (strncmp(p, "<integer>", 9) == 0) {
-		const char *s = p + 9;
-		const char *e = strstr(s, "</integer>");
-		if (e == NULL) return NULL;
-		return xml_value(s, e);
-	}
-	if (strncmp(p, "<real>", 6) == 0) {
-		const char *s = p + 6;
-		const char *e = strstr(s, "</real>");
-		if (e == NULL) return NULL;
-		return xml_value(s, e);
-	}
-	return NULL;
-}
 
 static int do_export_archive(const xcodebuild_opts *opts)
 {
@@ -1116,23 +1055,21 @@ static int do_export_archive(const xcodebuild_opts *opts)
 		return 1;
 	}
 
-	char *plist_text = read_file_all(opts->export_options_plist);
-	if (plist_text == NULL) {
+	CFDictionaryRef options = cfplist_read(opts->export_options_plist);
+	if (options == NULL) {
 		fprintf(stderr, "xcodebuild: error: cannot read export options plist '%s'\n",
 		        opts->export_options_plist);
 		return 1;
 	}
 
-	char *method = xmlplist_get(plist_text, "method");
-	char *destination = xmlplist_get(plist_text, "destination");
-	char *team = xmlplist_get(plist_text, "teamID");
-	char *compile = xmlplist_get(plist_text, "compileBitcode");
-	char *strip = xmlplist_get(plist_text, "stripSwiftSymbols");
-	free(plist_text);
+	char *method = cfplist_string(options, "method");
+	char *destination = cfplist_string(options, "destination");
+	char *team = cfplist_string(options, "teamID");
+	CFRelease(options);
 
 	if (method == NULL) {
 		fprintf(stderr, "xcodebuild: error: exportOptions.plist does not specify a 'method'\n");
-		free(method); free(destination); free(team); free(compile); free(strip);
+		free(method); free(destination); free(team);
 		return 1;
 	}
 
@@ -1145,8 +1082,6 @@ static int do_export_archive(const xcodebuild_opts *opts)
 	free(method);
 	free(destination);
 	free(team);
-	free(compile);
-	free(strip);
 	return 0;
 }
 
